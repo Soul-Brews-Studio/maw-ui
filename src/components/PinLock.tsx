@@ -25,7 +25,7 @@ export function PinLock({ children }: { children: React.ReactNode }) {
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => { setEnabled(false); setUnlocked(true); setLoading(false); });
   }, [unlocked]);
 
   const handleDigit = useCallback((d: string) => {
