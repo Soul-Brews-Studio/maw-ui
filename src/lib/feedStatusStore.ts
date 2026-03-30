@@ -21,3 +21,13 @@ export const useFeedStatusStore = create<FeedStatusStore>()((set, get) => ({
 export function useAgentStatus(target: string): PaneStatus {
   return useFeedStatusStore((s) => s.statuses[target] || "idle");
 }
+
+/** Hook: get live status for an agent object (replaces stale agent.status) */
+export function useLiveStatus(agent: { target: string }): PaneStatus {
+  return useFeedStatusStore((s) => s.statuses[agent.target] || "idle");
+}
+
+/** Hook: subscribe to ALL statuses — use for aggregate counts (dashboard, fleet) */
+export function useAllStatuses(): Record<string, PaneStatus> {
+  return useFeedStatusStore((s) => s.statuses);
+}

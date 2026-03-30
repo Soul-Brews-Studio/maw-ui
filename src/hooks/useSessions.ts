@@ -218,10 +218,11 @@ export function useSessions() {
     }
   }, []);
 
-  // Derive flat agent list — depends on sessions ONLY (not statuses, not previews)
-  // Components read status via useAgentStatus(target) from feedStatusStore
+  // Subscribe to statuses — agents re-derive on status change
+  // Blink prevented by stable useCallback props (not by removing reactivity)
+  const statuses = useFeedStatusStore((s) => s.statuses);
+
   const agents: AgentState[] = useMemo(() => {
-    const statuses = useFeedStatusStore.getState().statuses; // snapshot, not subscription
     const list = sessions.flatMap((s) =>
       s.windows.map((w) => {
         const key = `${s.name}:${w.index}`;
@@ -238,7 +239,7 @@ export function useSessions() {
           windowIndex: w.index,
           active: w.active,
           preview: "", // read from usePreviewStore at component level
-          status: statuses[key] || "idle", // snapshot — not reactive, use useAgentStatus() for live
+          status: statuses[key] || "idle",
           project,
           cwd: w.cwd,
           source: s.source && s.source !== "local" ? s.source : undefined,
@@ -248,7 +249,7 @@ export function useSessions() {
     list.sort((a, b) => agentSortKey(a.name) - agentSortKey(b.name));
     agentsRef.current = list;
     return list;
-  }, [sessions]);
+  }, [sessions, statuses]);
 
   const feedActive = useMemo(() => activeOracles(feedEvents, 5 * 60_000), [feedEvents]);
 

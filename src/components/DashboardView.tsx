@@ -5,6 +5,7 @@ import { AgentAvatar } from "./AgentAvatar";
 import { describeActivity, type FeedEvent } from "../lib/feed";
 import { useFleetStore } from "../lib/store";
 import { useAgentPreview } from "../lib/previewStore";
+import { useFeedStatusStore, useLiveStatus, useAllStatuses } from "../lib/feedStatusStore";
 import type { AgentState, Session, AgentEvent } from "../lib/types";
 
 // ─── Token types ────────────────────────────────────────────────────
@@ -66,7 +67,8 @@ const AgentStatusCard = memo(function AgentStatusCard({ agent, feedEvent, onSele
   onSelect: (agent: AgentState) => void;
   onCommand: (target: string, text: string) => void;
 }) {
-  const sc = STATUS_CONFIG[agent.status];
+  const liveStatus = useLiveStatus(agent);
+  const sc = STATUS_CONFIG[liveStatus] || STATUS_CONFIG.idle;
   const color = agentColor(agent.name);
   const room = roomStyle(agent.session);
   const preview = useAgentPreview(agent.target);
@@ -85,7 +87,7 @@ const AgentStatusCard = memo(function AgentStatusCard({ agent, feedEvent, onSele
       <div className="flex items-center gap-2.5 px-3 pt-3 pb-1">
         <div className="relative flex-shrink-0">
           <svg viewBox="-40 -50 80 80" width={36} height={36} overflow="visible">
-            <AgentAvatar name={agent.name} target={agent.target} status={agent.status} preview="" accent={color} onClick={() => {}} />
+            <AgentAvatar name={agent.name} target={agent.target} status={liveStatus} preview="" accent={color} onClick={() => {}} />
           </svg>
           <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0a0a14] ${sc.dot}`} />
         </div>
@@ -136,8 +138,9 @@ function StatusOverview({ agents, feedActive, agentFeedLog, onSelectAgent, send 
   onSelectAgent: (agent: AgentState) => void;
   send: (msg: object) => void;
 }) {
-  const busyCount = agents.filter(a => a.status === "busy").length;
-  const readyCount = agents.filter(a => a.status === "ready").length;
+  const statuses = useAllStatuses();
+  const busyCount = agents.filter(a => (statuses[a.target] || "idle") === "busy").length;
+  const readyCount = agents.filter(a => (statuses[a.target] || "idle") === "ready").length;
   const idleCount = agents.length - busyCount - readyCount;
 
   const handleCommand = useCallback((target: string, text: string) => {
@@ -305,6 +308,8 @@ function StatCard({ label, value, accent, sub }: { label: string; value: string;
 
 // ─── Command Center Panel ───────────────────────────────────────────
 function CommandCenter({ agents, send }: { agents: AgentState[]; send: (msg: object) => void }) {
+  const statuses = useAllStatuses();
+  const getStatus = (a: AgentState) => statuses[a.target] || "idle";
   const [selectedTarget, setSelectedTarget] = useState("");
   const [commandText, setCommandText] = useState("");
   const [broadcastMode, setBroadcastMode] = useState(false);
@@ -314,8 +319,9 @@ function CommandCenter({ agents, send }: { agents: AgentState[]; send: (msg: obj
   const sendCommand = useCallback(() => {
     if (!commandText.trim()) return;
 
+    const st = useFeedStatusStore.getState().statuses;
     const targets = broadcastMode
-      ? agents.filter(a => a.status === "busy" || a.status === "ready").map(a => a.target)
+      ? agents.filter(a => { const s = st[a.target] || "idle"; return s === "busy" || s === "ready"; }).map(a => a.target)
       : selectedTarget ? [selectedTarget] : [];
 
     if (targets.length === 0) return;
@@ -333,8 +339,8 @@ function CommandCenter({ agents, send }: { agents: AgentState[]; send: (msg: obj
   }, [commandText, selectedTarget, broadcastMode, agents, send]);
 
   const quickActions = useMemo(() => [
-    { label: "Wake All", icon: "▶", color: "#22c55e", action: () => { for (const a of agents) { if (a.status === "idle") send({ type: "wake", target: a.target, command: guessCommand(a.name) }); } } },
-    { label: "Sleep All", icon: "⏸", color: "#fbbf24", action: () => { if (confirm("Sleep all busy agents?")) { for (const a of agents) { if (a.status === "busy") send({ type: "sleep", target: a.target }); } } } },
+    { label: "Wake All", icon: "▶", color: "#22c55e", action: () => { const st = useFeedStatusStore.getState().statuses; for (const a of agents) { if ((st[a.target] || "idle") === "idle") send({ type: "wake", target: a.target, command: guessCommand(a.name) }); } } },
+    { label: "Sleep All", icon: "⏸", color: "#fbbf24", action: () => { const st = useFeedStatusStore.getState().statuses; if (confirm("Sleep all busy agents?")) { for (const a of agents) { if ((st[a.target] || "idle") === "busy") send({ type: "sleep", target: a.target }); } } } },
     { label: "/recap", icon: "📋", color: "#818cf8", action: () => { if (selectedTarget) send({ type: "send", target: selectedTarget, text: "/recap\n" }); } },
     { label: "/compact", icon: "📦", color: "#f472b6", action: () => { if (selectedTarget) send({ type: "send", target: selectedTarget, text: "/compact\n" }); } },
   ], [agents, send, selectedTarget]);
@@ -378,7 +384,7 @@ function CommandCenter({ agents, send }: { agents: AgentState[]; send: (msg: obj
             <option value="__broadcast__">Broadcast (all active)</option>
             {agents.map(a => (
               <option key={a.target} value={a.target}>
-                {a.status === "busy" ? "● " : a.status === "ready" ? "○ " : "· "}{a.name}
+                {getStatus(a) === "busy" ? "● " : getStatus(a) === "ready" ? "○ " : "· "}{a.name}
               </option>
             ))}
           </select>
@@ -407,8 +413,8 @@ function CommandCenter({ agents, send }: { agents: AgentState[]; send: (msg: obj
 
         {/* Per-agent quick controls */}
         <div className="flex flex-wrap gap-1.5">
-          {agents.filter(a => a.status === "busy" || a.status === "ready").slice(0, 12).map(a => {
-            const sc = STATUS_CONFIG[a.status];
+          {agents.filter(a => { const s = getStatus(a); return s === "busy" || s === "ready"; }).slice(0, 12).map(a => {
+            const sc = STATUS_CONFIG[getStatus(a)] || STATUS_CONFIG.idle;
             return (
               <button
                 key={a.target}
