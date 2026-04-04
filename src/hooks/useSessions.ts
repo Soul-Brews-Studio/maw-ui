@@ -36,6 +36,14 @@ export function useSessions() {
     });
   }, []);
 
+  // Fallback: fetch teams via REST API on mount (in case WebSocket doesn't deliver them)
+  useEffect(() => {
+    fetch("/api/teams")
+      .then(r => r.json())
+      .then(data => setTeams(data.teams || []))
+      .catch(() => {});
+  }, []);
+
   const markBusy = useFleetStore((s) => s.markBusy);
   const markSlept = useFleetStore((s) => s.markSlept);
   const clearSlept = useFleetStore((s) => s.clearSlept);
@@ -187,7 +195,22 @@ export function useSessions() {
       setSessions((data.sessions as Session[]).filter(s => !s.name.startsWith("maw-pty-")));
     } else if (data.type === "recent") {
       const agents: { target: string; name: string; session: string }[] = data.agents || [];
-      if (agents.length > 0) markBusy(agents);
+      if (agents.length > 0) {
+        markBusy(agents);
+        // Set initial "ready" status for agents detected as running Claude
+        // (they may not have fired feed events yet)
+        setCaptureData(prev => {
+          let next = prev;
+          for (const a of agents) {
+            const existing = next[a.target];
+            if (!existing || existing.status === "idle") {
+              if (next === prev) next = { ...prev };
+              next[a.target] = { preview: existing?.preview || "", status: "ready" };
+            }
+          }
+          return next;
+        });
+      }
     } else if (data.type === "feed") {
       const feedEvent = data.event as FeedEvent;
       setFeedEvents(prev => {
