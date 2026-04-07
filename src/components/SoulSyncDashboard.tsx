@@ -24,6 +24,7 @@ export function SoulSyncDashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<string[] | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -86,7 +87,7 @@ export function SoulSyncDashboard() {
           <p className="font-mono text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>Parent/child config synchronization</p>
         </div>
         <button
-          onClick={() => handleSync()}
+          onClick={() => setConfirmTarget([])}
           disabled={!!syncing}
           className="px-5 py-2.5 rounded-xl font-mono text-sm transition-all active:scale-95 cursor-pointer disabled:opacity-50"
           style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" }}
@@ -94,6 +95,22 @@ export function SoulSyncDashboard() {
           {syncing === "all" ? "Syncing..." : "Sync All"}
         </button>
       </div>
+
+      {/* Confirmation dialog */}
+      {confirmTarget !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmTarget(null)}>
+          <div className="rounded-2xl p-6 max-w-sm w-full mx-4" style={{ background: "#0a0a0f", border: "1px solid rgba(168,85,247,0.2)" }} onClick={e => e.stopPropagation()}>
+            <h3 className="font-mono font-bold text-lg mb-2" style={{ color: "#e2e8f0" }}>Confirm Sync</h3>
+            <p className="font-mono text-sm mb-6" style={{ color: "rgba(255,255,255,0.5)" }}>
+              Sync parent config to <span style={{ color: "#c084fc" }}>{confirmTarget.length ? confirmTarget.join(", ") : "all children"}</span>? This will overwrite child configs.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setConfirmTarget(null)} className="px-4 py-2 rounded-xl font-mono text-sm cursor-pointer" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}>Cancel</button>
+              <button onClick={() => { const t = confirmTarget.length ? confirmTarget : undefined; setConfirmTarget(null); handleSync(t); }} className="px-4 py-2 rounded-xl font-mono text-sm cursor-pointer" style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" }}>Sync</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sync result toast */}
       {syncResult && (
@@ -143,7 +160,7 @@ export function SoulSyncDashboard() {
                   <h3 className="font-mono font-bold" style={{ color: sc.color }}>{child.name}</h3>
                 </div>
                 <button
-                  onClick={() => handleSync([child.name])}
+                  onClick={() => setConfirmTarget([child.name])}
                   disabled={!!syncing}
                   className="px-3 py-1 rounded-lg font-mono text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
                   style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}

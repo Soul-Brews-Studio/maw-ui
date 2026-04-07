@@ -136,26 +136,31 @@ export function MonitoringView() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"health" | "audit" | "snapshots">("health");
 
-  const fetchAll = useCallback(async () => {
-    const [healthRes, auditRes, snapRes] = await Promise.allSettled([
-      fetch(apiUrl("/api/monitoring/health")).then(r => r.json()),
-      fetch(apiUrl("/api/monitoring/audit?limit=100")).then(r => r.json()),
-      fetch(apiUrl("/api/snapshots?limit=20")).then(r => r.json()),
-    ]);
-
-    if (healthRes.status === "fulfilled") setOracles(healthRes.value.oracles || []);
-    if (auditRes.status === "fulfilled") setAudit(auditRes.value.entries || []);
-    if (snapRes.status === "fulfilled") setSnapshots(snapRes.value.snapshots || []);
+  const fetchTab = useCallback(async (activeTab?: string) => {
+    const t = activeTab || tab;
+    if (t === "health" || loading) {
+      const res = await fetch(apiUrl("/api/monitoring/health")).then(r => r.json()).catch(() => ({}));
+      setOracles(res.oracles || []);
+    }
+    if (t === "audit" || loading) {
+      const res = await fetch(apiUrl("/api/monitoring/audit?limit=100")).then(r => r.json()).catch(() => ({}));
+      setAudit(res.entries || []);
+    }
+    if (t === "snapshots" || loading) {
+      const res = await fetch(apiUrl("/api/snapshots?limit=20")).then(r => r.json()).catch(() => ({}));
+      setSnapshots(res.snapshots || []);
+    }
     setLoading(false);
-  }, []);
+  }, [tab, loading]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  // Initial load: fetch all tabs
+  useEffect(() => { fetchTab(); }, []);
 
-  // Auto-refresh every 30s
+  // Auto-refresh active tab every 30s
   useEffect(() => {
-    const interval = setInterval(fetchAll, 30_000);
+    const interval = setInterval(() => fetchTab(tab), 30_000);
     return () => clearInterval(interval);
-  }, [fetchAll]);
+  }, [tab, fetchTab]);
 
   if (loading) {
     return (
@@ -185,7 +190,7 @@ export function MonitoringView() {
           </p>
         </div>
         <button
-          onClick={fetchAll}
+          onClick={() => fetchTab()}
           className="px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer"
           style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
         >
