@@ -13,6 +13,9 @@ const SHORTCUTS = [
   ]],
   ["Views", [
     ["V", "VS view"],
+    ["S", "Soul Sync"],
+    ["P", "Progress"],
+    ["M", "Monitoring"],
   ]],
   ["Pinned Card", [
     ["Click agent", "Pin card + input"],

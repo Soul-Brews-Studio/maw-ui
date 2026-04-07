@@ -2,6 +2,12 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { apiUrl } from "../lib/api";
 
 const STORAGE_KEY = "office-unlocked";
+const TOKEN_KEY = "office-token";
+
+/** Store JWT token for API calls */
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 export function PinLock({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(STORAGE_KEY) === "1");
@@ -43,6 +49,7 @@ export function PinLock({ children }: { children: React.ReactNode }) {
           .then(data => {
             if (data.ok) {
               sessionStorage.setItem(STORAGE_KEY, "1");
+              if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
               window.location.hash = "mission";
               setUnlocked(true);
             } else {

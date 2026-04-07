@@ -270,6 +270,15 @@ export function App() {
       if (e.key.toLowerCase() === "v" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         window.location.hash = "vs";
       }
+      if (e.key.toLowerCase() === "s" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        window.location.hash = "soul-sync";
+      }
+      if (e.key.toLowerCase() === "p" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        window.location.hash = "progress";
+      }
+      if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        window.location.hash = "monitoring";
+      }
       if (e.key.toLowerCase() === "i" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         setShowInbox(prev => !prev);
       }
