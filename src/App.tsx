@@ -18,6 +18,9 @@ import { InboxOverlay } from "./components/InboxView";
 import { WorktreeView } from "./components/WorktreeView";
 import { ChatView } from "./components/ChatView";
 import { DashboardView } from "./components/DashboardView";
+import { SoulSyncDashboard } from "./components/SoulSyncDashboard";
+import { ProgressViewer } from "./components/ProgressViewer";
+import { MonitoringView } from "./components/MonitoringView";
 import { LoadingSkeleton } from "./components/LoadingSkeleton";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
 import { JumpOverlay } from "./components/JumpOverlay";
@@ -487,6 +490,30 @@ export function App() {
     return (
       <Layout activeView="chat" {...layoutProps}>
         <ChatView />
+      </Layout>
+    );
+  }
+
+  if (route === "soul-sync") {
+    return (
+      <Layout activeView="soul-sync" {...layoutProps}>
+        <SoulSyncDashboard />
+      </Layout>
+    );
+  }
+
+  if (route === "progress") {
+    return (
+      <Layout activeView="progress" {...layoutProps}>
+        <ProgressViewer feedEvents={feedEvents} />
+      </Layout>
+    );
+  }
+
+  if (route === "monitoring") {
+    return (
+      <Layout activeView="monitoring" {...layoutProps}>
+        <MonitoringView />
       </Layout>
     );
   }

@@ -76,6 +76,9 @@ const NAV_ITEMS = [
   { href: "#terminal", label: "Terminal", id: "terminal" },
   { href: "#chat", label: "Chat", id: "chat" },
   { href: "#teams", label: "Teams", id: "teams" },
+  { href: "#soul-sync", label: "Sync", id: "soul-sync" },
+  { href: "#progress", label: "Progress", id: "progress" },
+  { href: "#monitoring", label: "Monitor", id: "monitoring" },
   { href: "#config", label: "Config", id: "config" },
 ];
 
