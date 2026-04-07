@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/apiFetch";
 import { agentColor } from "../lib/constants";
 import { AgentAvatar } from "./AgentAvatar";
 
@@ -139,15 +139,15 @@ export function MonitoringView() {
   const fetchTab = useCallback(async (activeTab?: string) => {
     const t = activeTab || tab;
     if (t === "health" || loading) {
-      const res = await fetch(apiUrl("/api/monitoring/health")).then(r => r.json()).catch(() => ({}));
+      const res = await apiFetch<{ oracles: OracleHealth[] }>("/api/monitoring/health").catch(() => ({ oracles: [] }));
       setOracles(res.oracles || []);
     }
     if (t === "audit" || loading) {
-      const res = await fetch(apiUrl("/api/monitoring/audit?limit=100")).then(r => r.json()).catch(() => ({}));
+      const res = await apiFetch<{ entries: AuditEntry[] }>("/api/monitoring/audit?limit=100").catch(() => ({ entries: [] }));
       setAudit(res.entries || []);
     }
     if (t === "snapshots" || loading) {
-      const res = await fetch(apiUrl("/api/snapshots?limit=20")).then(r => r.json()).catch(() => ({}));
+      const res = await apiFetch<{ snapshots: SnapshotSummary[] }>("/api/snapshots?limit=20").catch(() => ({ snapshots: [] }));
       setSnapshots(res.snapshots || []);
     }
     setLoading(false);

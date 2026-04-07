@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/apiFetch";
 
 interface SyncChild {
   name: string;
@@ -28,8 +28,7 @@ export function SoulSyncDashboard() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl("/api/fleet/soul-sync-status"));
-      const data = await res.json();
+      const data = await apiFetch<{ tree: SyncTree | null }>("/api/fleet/soul-sync-status");
       setTree(data.tree || null);
     } catch { setTree(null); }
     setLoading(false);
@@ -41,12 +40,10 @@ export function SoulSyncDashboard() {
     setSyncing(targets?.[0] || "all");
     setSyncResult(null);
     try {
-      const res = await fetch(apiUrl("/api/fleet/soul-sync"), {
+      const data = await apiFetch<{ synced?: string[]; fields?: string[] }>("/api/fleet/soul-sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targets }),
       });
-      const data = await res.json();
       setSyncResult(`Synced: ${data.synced?.join(", ") || "none"} (${data.fields?.length || 0} fields)`);
       fetchStatus();
     } catch (e: any) {
