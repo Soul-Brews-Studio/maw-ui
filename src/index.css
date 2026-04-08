@@ -20,13 +20,14 @@ button, [role="button"], a[href], summary { cursor: pointer; }
   html { -webkit-text-size-adjust: 100%; }
   /* Smaller fonts for mobile */
   .font-mono { font-size: 11px; }
-  /* Touch-friendly tap targets */
-  button, [role="button"] { min-height: 36px; }
+  /* Touch-friendly tap targets — Apple HIG recommends 44px */
+  button, [role="button"], select { min-height: 36px; }
   /* Fix bottom bar overlap with mobile browser chrome */
   .pb-safe { padding-bottom: env(safe-area-inset-bottom, 8px); }
-  /* Narrower padding */
-  .px-4 { padding-left: 0.75rem; padding-right: 0.75rem; }
-  .px-6 { padding-left: 1rem; padding-right: 1rem; }
+  /* Ensure tables are scrollable */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Prevent content overflow */
+  pre, code { word-break: break-all; }
 }
 
 /* Shared */

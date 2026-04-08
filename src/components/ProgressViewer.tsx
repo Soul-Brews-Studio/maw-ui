@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { agentColor } from "../lib/constants";
 import { describeActivity, type FeedEvent } from "../lib/feed";
 import { AgentAvatar } from "./AgentAvatar";
@@ -55,13 +55,38 @@ const EventRow = memo(function EventRow({ event }: { event: FeedEvent }) {
   );
 });
 
-const OracleTimeline = memo(function OracleTimeline({ group }: { group: OracleGroup }) {
+const OracleTimeline = memo(function OracleTimeline({
+  group,
+  expanded,
+  onToggle,
+}: {
+  group: OracleGroup;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const color = agentColor(group.oracle + "-oracle");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(group.events.length);
+
+  // Auto-scroll when new events arrive (only if already near bottom)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !expanded) return;
+    if (group.events.length > prevCountRef.current) {
+      // Events are newest-first, so scroll to top for latest
+      el.scrollTop = 0;
+    }
+    prevCountRef.current = group.events.length;
+  }, [group.events.length, expanded]);
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      {/* Header — clickable to expand/collapse */}
+      <div
+        className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 cursor-pointer select-none transition-colors hover:bg-white/[0.03] min-h-[52px]"
+        style={{ borderBottom: expanded ? "1px solid rgba(255,255,255,0.06)" : "none" }}
+        onClick={onToggle}
+      >
         <AgentAvatar name={group.oracle + "-oracle"} size={36} />
         <div className="flex-1">
           <h3 className="font-mono font-bold" style={{ color }}>{group.oracle}</h3>
@@ -69,22 +94,41 @@ const OracleTimeline = memo(function OracleTimeline({ group }: { group: OracleGr
             {group.currentActivity} · {timeAgo(group.lastActive)}
           </p>
         </div>
-        <div className="text-right">
+        <div className="flex items-center gap-3">
           <span className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{group.events.length} events</span>
+          <span
+            className="text-xs transition-transform duration-200"
+            style={{ color: "rgba(255,255,255,0.3)", transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            ▼
+          </span>
         </div>
       </div>
 
-      {/* Timeline */}
-      <div className="px-2 py-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-        {group.events.map((event, i) => (
-          <EventRow key={`${event.ts}-${i}`} event={event} />
-        ))}
-      </div>
+      {/* Timeline — collapsible */}
+      {expanded && (
+        <div ref={scrollRef} className="px-2 py-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+          {group.events.map((event, i) => (
+            <EventRow key={`${event.ts}-${i}`} event={event} />
+          ))}
+        </div>
+      )}
     </div>
   );
 });
 
 export function ProgressViewer({ feedEvents }: { feedEvents: FeedEvent[] }) {
+  const [expandedOracles, setExpandedOracles] = useState<Set<string>>(new Set());
+
+  const toggleOracle = useCallback((oracle: string) => {
+    setExpandedOracles((prev) => {
+      const next = new Set(prev);
+      if (next.has(oracle)) next.delete(oracle);
+      else next.add(oracle);
+      return next;
+    });
+  }, []);
+
   const groups = useMemo(() => {
     const map = new Map<string, FeedEvent[]>();
     for (const e of feedEvents) {
@@ -108,6 +152,13 @@ export function ProgressViewer({ feedEvents }: { feedEvents: FeedEvent[] }) {
     return result.sort((a, b) => b.lastActive - a.lastActive);
   }, [feedEvents]);
 
+  // Auto-expand the most recently active oracle
+  useEffect(() => {
+    if (groups.length > 0 && expandedOracles.size === 0) {
+      setExpandedOracles(new Set([groups[0].oracle]));
+    }
+  }, [groups.length > 0]); // only on first non-empty render
+
   if (groups.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -120,20 +171,37 @@ export function ProgressViewer({ feedEvents }: { feedEvents: FeedEvent[] }) {
     );
   }
 
+  const allExpanded = groups.every((g) => expandedOracles.has(g.oracle));
+
   return (
-    <div className="px-6 py-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="px-3 sm:px-6 py-4 sm:py-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Progress</h1>
-          <p className="font-mono text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
+          <h1 className="text-xl sm:text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Progress</h1>
+          <p className="font-mono text-[10px] sm:text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
             {groups.length} oracle{groups.length !== 1 ? "s" : ""} · {feedEvents.length} events
           </p>
         </div>
+        <button
+          className="font-mono text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-white/[0.06] min-h-[44px] sm:min-h-0"
+          style={{ color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.1)" }}
+          onClick={() => {
+            if (allExpanded) setExpandedOracles(new Set());
+            else setExpandedOracles(new Set(groups.map((g) => g.oracle)));
+          }}
+        >
+          {allExpanded ? "Collapse all" : "Expand all"}
+        </button>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         {groups.map((group) => (
-          <OracleTimeline key={group.oracle} group={group} />
+          <OracleTimeline
+            key={group.oracle}
+            group={group}
+            expanded={expandedOracles.has(group.oracle)}
+            onToggle={() => toggleOracle(group.oracle)}
+          />
         ))}
       </div>
     </div>

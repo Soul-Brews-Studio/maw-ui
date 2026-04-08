@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "../lib/apiFetch";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 interface ScheduleEvent {
   id: number;
@@ -61,14 +62,14 @@ function EventCard({ event, onStatusChange, onDelete }: { event: ScheduleEvent; 
   const isPast = new Date(event.startTime) < new Date() && event.status === "upcoming";
 
   return (
-    <div className="rounded-2xl p-5 transition-all" style={{
+    <div className="rounded-xl sm:rounded-2xl p-3 sm:p-5 transition-all" style={{
       background: event.status === "cancelled" ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.02)",
       border: `1px solid ${event.status === "cancelled" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.06)"}`,
       opacity: event.status === "cancelled" ? 0.5 : 1,
     }}>
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <h3 className="font-mono font-bold text-sm" style={{ color: "rgba(255,255,255,0.85)" }}>{event.title}</h3>
             <StatusBadge status={isPast ? "active" : event.status} />
             {event.recurrence && (
@@ -101,18 +102,18 @@ function EventCard({ event, onStatusChange, onDelete }: { event: ScheduleEvent; 
 
         {/* Actions */}
         {event.status !== "cancelled" && (
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 self-end sm:self-start">
             {event.status === "upcoming" && (
               <button
                 onClick={() => onStatusChange(event.id, "done")}
-                className="px-2 py-1 rounded-lg font-mono text-[10px] transition-all active:scale-95 cursor-pointer"
+                className="px-3 sm:px-2 py-2 sm:py-1 rounded-lg font-mono text-[11px] sm:text-[10px] transition-all active:scale-95 cursor-pointer min-h-[44px] sm:min-h-0"
                 style={{ background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.15)" }}
                 title="Mark done"
               >Done</button>
             )}
             <button
               onClick={() => onDelete(event.id)}
-              className="px-2 py-1 rounded-lg font-mono text-[10px] transition-all active:scale-95 cursor-pointer"
+              className="px-3 sm:px-2 py-2 sm:py-1 rounded-lg font-mono text-[11px] sm:text-[10px] transition-all active:scale-95 cursor-pointer min-h-[44px] sm:min-h-0"
               style={{ background: "rgba(239,68,68,0.06)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.1)" }}
               title="Cancel"
             >Cancel</button>
@@ -167,10 +168,10 @@ function AddEventForm({ onAdd }: { onAdd: () => void }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer"
+        className="px-3 sm:px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer min-h-[44px] sm:min-h-0"
         style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", color: "#22c55e" }}
       >
-        + Add Event
+        + Add
       </button>
     );
   }
@@ -291,6 +292,16 @@ export function ScheduleView() {
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
+  // Real-time: refetch on schedule events via shared WebSocket
+  const fetchEventsRef = useRef(fetchEvents);
+  fetchEventsRef.current = fetchEvents;
+  const handleWsMessage = useCallback((msg: any) => {
+    if (msg.type === "feed" || msg.type === "schedule") {
+      fetchEventsRef.current();
+    }
+  }, []);
+  useWebSocket(handleWsMessage);
+
   const handleStatusChange = useCallback(async (id: number, status: string) => {
     try {
       await apiFetch(`/api/schedule/${id}`, {
@@ -341,19 +352,19 @@ export function ScheduleView() {
   const inputStyle = "bg-black/50 border border-white/[0.08] rounded-lg px-3 py-2 text-xs font-mono text-white/80 outline-none focus:border-cyan-400/30 placeholder:text-white/15";
 
   return (
-    <div className="px-6 py-6 max-w-4xl mx-auto">
+    <div className="px-3 sm:px-6 py-4 sm:py-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Schedule</h1>
-          <p className="font-mono text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
-            {events.length} event{events.length !== 1 ? "s" : ""}
+          <h1 className="text-xl sm:text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Schedule</h1>
+          <p className="font-mono text-[10px] sm:text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
+            {events.length} event{events.length !== 1 ? "s" : ""} · live
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => fetchEvents()}
-            className="px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer"
+            className="px-3 sm:px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer min-h-[44px] sm:min-h-0"
             style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
           >
             Refresh
@@ -363,13 +374,13 @@ export function ScheduleView() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div className="flex gap-1 p-1 rounded-xl overflow-x-auto scrollbar-hide" style={{ background: "rgba(255,255,255,0.03)", WebkitOverflowScrolling: "touch" }}>
           {filterTabs.map(t => (
             <button
               key={t.id}
               onClick={() => setFilter(t.id)}
-              className="py-2 px-4 rounded-lg font-mono text-xs transition-all cursor-pointer"
+              className="py-2 px-3 sm:px-4 rounded-lg font-mono text-xs transition-all cursor-pointer min-h-[44px] sm:min-h-0 whitespace-nowrap"
               style={{
                 background: filter === t.id ? "rgba(168,85,247,0.12)" : "transparent",
                 color: filter === t.id ? "#c084fc" : "rgba(255,255,255,0.4)",
@@ -381,26 +392,26 @@ export function ScheduleView() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className={inputStyle}
+            className={inputStyle + " min-h-[44px] sm:min-h-0"}
             placeholder="From"
           />
-          <span className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>-</span>
+          <span className="font-mono text-xs shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>-</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className={inputStyle}
+            className={inputStyle + " min-h-[44px] sm:min-h-0"}
             placeholder="To"
           />
           {(dateFrom || dateTo) && (
             <button
               onClick={() => { setDateFrom(""); setDateTo(""); }}
-              className="font-mono text-xs px-2 py-1 rounded cursor-pointer"
+              className="font-mono text-xs px-2 py-1.5 rounded cursor-pointer min-h-[44px] sm:min-h-0 shrink-0"
               style={{ color: "rgba(255,255,255,0.3)" }}
             >
               Clear

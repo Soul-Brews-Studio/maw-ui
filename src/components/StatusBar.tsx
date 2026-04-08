@@ -111,39 +111,39 @@ function useTokenRate() {
 export const StatusBar = memo(function StatusBar({ connected, agentCount, sessionCount, tabCount = 0, activeView = "office", askCount = 0, onInbox, onJump, muted, onToggleMute, children }: StatusBarProps) {
   const { lastHourRate } = useTokenRate();
   return (
-    <header className="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 mx-4 sm:mx-6 mt-3 px-4 sm:px-6 py-2.5 rounded-2xl bg-black/50 backdrop-blur-xl border border-white/[0.06] shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-      <a href="#office" className="text-base sm:text-lg font-bold tracking-[4px] sm:tracking-[6px] text-cyan-400 uppercase whitespace-nowrap hover:text-cyan-300 transition-colors">
-        ARRA Office
+    <header className="sticky top-0 z-20 flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1.5 sm:gap-y-2 mx-2 sm:mx-4 md:mx-6 mt-2 sm:mt-3 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-xl border border-white/[0.06] shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
+      <a href="#office" className="text-sm sm:text-base md:text-lg font-bold tracking-[3px] sm:tracking-[4px] md:tracking-[6px] text-cyan-400 uppercase whitespace-nowrap hover:text-cyan-300 transition-colors">
+        ARRA
       </a>
 
-      <span className="flex items-center gap-1.5 text-sm text-white/70">
+      <span className="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm text-white/70">
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? "bg-emerald-400 shadow-[0_0_6px_#4caf50]" : "bg-red-400 animate-pulse"}`} />
         {connected ? "LIVE" : "..."}
       </span>
 
       {isRemote && (
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md whitespace-nowrap" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.2)" }}>
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md whitespace-nowrap hidden sm:inline" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.2)" }}>
           {new URLSearchParams(window.location.search).get("host")}
         </span>
       )}
 
-      <span className="text-sm text-white/70 whitespace-nowrap">
-        <strong className="text-cyan-400">{agentCount}</strong> agents
+      <span className="text-xs sm:text-sm text-white/70 whitespace-nowrap">
+        <strong className="text-cyan-400">{agentCount}</strong><span className="hidden sm:inline"> agents</span><span className="sm:hidden">a</span>
       </span>
-      <span className="text-sm text-white/70 whitespace-nowrap">
-        <strong className="text-purple-400">{sessionCount}</strong> rooms
+      <span className="text-xs sm:text-sm text-white/70 whitespace-nowrap">
+        <strong className="text-purple-400">{sessionCount}</strong><span className="hidden sm:inline"> rooms</span><span className="sm:hidden">r</span>
       </span>
       {tabCount > 0 && (
-        <span className="text-sm text-white/70 whitespace-nowrap">
+        <span className="text-xs sm:text-sm text-white/70 whitespace-nowrap hidden sm:inline">
           <strong className="text-green-400">{tabCount}</strong> tabs
         </span>
       )}
-      <span className="text-[10px] text-white/20 font-mono whitespace-nowrap">
+      <span className="text-[10px] text-white/20 font-mono whitespace-nowrap hidden md:inline">
         v{__MAW_VERSION__} · {__MAW_BUILD__}
       </span>
 
       {lastHourRate && lastHourRate.totalTokens > 0 && (
-        <span className="text-[10px] font-mono whitespace-nowrap flex items-center gap-1" title={`Last 60min — ${formatTokens(lastHourRate.inputTokens)} in · ${formatTokens(lastHourRate.outputTokens)} out · ${lastHourRate.turns} turns`}>
+        <span className="text-[10px] font-mono whitespace-nowrap items-center gap-1 hidden sm:flex" title={`Last 60min — ${formatTokens(lastHourRate.inputTokens)} in · ${formatTokens(lastHourRate.outputTokens)} out · ${lastHourRate.turns} turns`}>
           <span className="text-amber-400/70">{formatTokens(lastHourRate.totalPerMin)}</span>
           <span className="text-white/15">tok/min</span>
         </span>
@@ -157,7 +157,7 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
       {isTouch && onJump && (
         <button
           onClick={onJump}
-          className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all whitespace-nowrap"
+          className="px-2 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all whitespace-nowrap min-h-[44px] sm:min-h-0"
           style={{ background: "rgba(34,211,238,0.15)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.25)" }}
           title="Jump to agent (⌘J)"
         >
@@ -165,9 +165,9 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
         </button>
       )}
 
-      <nav className={`${isTouch && onJump ? "" : "ml-auto "}flex items-center gap-3 sm:gap-4 text-sm overflow-x-auto max-w-full scrollbar-hide`} style={{ WebkitOverflowScrolling: "touch" }}>
+      <nav className={`${isTouch && onJump ? "" : "ml-auto "}flex items-center gap-1 sm:gap-3 md:gap-4 text-xs sm:text-sm overflow-x-auto max-w-full scrollbar-hide pb-safe`} style={{ WebkitOverflowScrolling: "touch" }}>
         {onInbox && (
-          <button onClick={onInbox} className="relative transition-colors whitespace-nowrap text-white/50 hover:text-white/80 cursor-pointer" title="Inbox (i)">
+          <button onClick={onInbox} className="relative transition-colors whitespace-nowrap text-white/50 hover:text-white/80 cursor-pointer min-h-[44px] sm:min-h-0 px-1.5 sm:px-0 flex items-center" title="Inbox (i)">
             Inbox
             {askCount > 0 && (
               <span className="absolute -top-1.5 -right-3 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold text-white bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]">
@@ -180,7 +180,7 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
           <a
             key={item.id}
             href={item.href}
-            className={`transition-colors whitespace-nowrap ${
+            className={`transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 px-1.5 sm:px-0 flex items-center ${
               activeView === item.id
                 ? "text-cyan-400 font-bold"
                 : "text-white/50 hover:text-white/80"

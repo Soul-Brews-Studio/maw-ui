@@ -44,22 +44,22 @@ function FloatingButtons() {
   }, [showSounds]);
 
   return (
-    <div ref={ref} className="fixed top-20 right-6 flex flex-col gap-3 z-30">
+    <div ref={ref} className="fixed top-20 right-3 sm:right-6 flex flex-col gap-2 sm:gap-3 z-30">
       <button
         onClick={() => window.dispatchEvent(new CustomEvent("search-open"))}
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
+        className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-base sm:text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
         style={{ background: "rgba(34,211,238,0.12)", border: "1px solid rgba(34,211,238,0.25)", color: "#22d3ee" }}
         title="Oracle Search (⌘K)"
       >🔍</button>
       <button
         onClick={() => window.dispatchEvent(new CustomEvent("broadcast-open"))}
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
+        className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-base sm:text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
         style={{ background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}
         title="Broadcast to all agents"
       >📢</button>
       <button
         onClick={() => setShowSounds(!showSounds)}
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
+        className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-base sm:text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
         style={{ background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.25)", color: "#a855f7" }}
         title="Change notification sound"
       >{SOUND_PROFILES.find(p => p.id === current)?.emoji || "🔔"}</button>
@@ -71,7 +71,7 @@ function FloatingButtons() {
           localStorage.setItem("office-multiview", next ? "1" : "0");
           window.dispatchEvent(new CustomEvent("multiview-change", { detail: next }));
         }}
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
+        className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-base sm:text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
         style={{ background: multiView ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.06)", border: `1px solid ${multiView ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.1)"}`, color: multiView ? "#22c55e" : "#666" }}
         title={multiView ? "Multi-card view (click for single)" : "Single card view (click for multi)"}
       >{multiView ? "📺" : "1️⃣"}</button>
@@ -83,7 +83,7 @@ function FloatingButtons() {
           localStorage.setItem("office-source-filter", next);
           window.dispatchEvent(new CustomEvent("source-filter-change", { detail: next }));
         }}
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
+        className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-base sm:text-xl backdrop-blur-xl active:scale-90 cursor-pointer transition-all shadow-lg"
         style={{
           background: sourceFilter === "all" ? "rgba(255,255,255,0.06)" : sourceFilter === "local" ? "rgba(76,175,80,0.12)" : "rgba(168,85,247,0.12)",
           border: `1px solid ${sourceFilter === "all" ? "rgba(255,255,255,0.1)" : sourceFilter === "local" ? "rgba(76,175,80,0.25)" : "rgba(168,85,247,0.25)"}`,

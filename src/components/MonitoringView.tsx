@@ -64,12 +64,12 @@ function HealthCard({ oracle }: { oracle: OracleHealth }) {
   const statusColor = isHealthy ? "#22c55e" : "#ef4444";
 
   return (
-    <div className="rounded-2xl p-5 transition-all" style={{
+    <div className="rounded-xl sm:rounded-2xl p-4 sm:p-5 transition-all" style={{
       background: isHealthy ? "rgba(34,197,94,0.04)" : "rgba(239,68,68,0.04)",
       border: `1px solid ${isHealthy ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}`,
     }}>
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0" style={{ background: `${color}22`, border: `2px solid ${color}` }}>
+      <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-base sm:text-lg font-bold shrink-0" style={{ background: `${color}22`, border: `2px solid ${color}` }}>
           {agentIcon(oracle.name + "-oracle")}
         </div>
         <div className="flex-1">
@@ -174,7 +174,7 @@ function ServerHealth({ snapshots }: { snapshots: HealthSnapshot[] }) {
   return (
     <div className="space-y-6">
       {/* Current Status Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
           <div className="font-mono text-[10px] mb-2" style={{ color: "rgba(255,255,255,0.3)" }}>MEMORY</div>
           <div className="font-mono text-xl font-bold mb-1" style={{ color: latest.memUsedPct > 85 ? "#ef4444" : "#22c55e" }}>
@@ -386,18 +386,18 @@ export function MonitoringView() {
   ];
 
   return (
-    <div className="px-6 py-6 max-w-6xl mx-auto">
+    <div className="px-3 sm:px-6 py-4 sm:py-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Monitoring</h1>
-          <p className="font-mono text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
-            {oracles.length} oracle{oracles.length !== 1 ? "s" : ""} tracked · auto-refresh 30s
+          <h1 className="text-xl sm:text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Monitoring</h1>
+          <p className="font-mono text-[10px] sm:text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
+            {oracles.length} oracle{oracles.length !== 1 ? "s" : ""} tracked
           </p>
         </div>
         <button
           onClick={() => fetchTab()}
-          className="px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer"
+          className="px-3 sm:px-4 py-2 rounded-xl font-mono text-xs transition-all active:scale-95 cursor-pointer min-h-[44px] sm:min-h-0"
           style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
         >
           Refresh
@@ -405,12 +405,12 @@ export function MonitoringView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
+      <div className="flex gap-1 mb-4 sm:mb-6 p-1 rounded-xl overflow-x-auto scrollbar-hide" style={{ background: "rgba(255,255,255,0.03)", WebkitOverflowScrolling: "touch" }}>
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="flex-1 py-2 px-4 rounded-lg font-mono text-xs transition-all cursor-pointer"
+            className="flex-1 py-2 px-2 sm:px-4 rounded-lg font-mono text-[11px] sm:text-xs transition-all cursor-pointer whitespace-nowrap min-h-[44px] sm:min-h-0"
             style={{
               background: tab === t.id ? "rgba(168,85,247,0.12)" : "transparent",
               color: tab === t.id ? "#c084fc" : "rgba(255,255,255,0.4)",

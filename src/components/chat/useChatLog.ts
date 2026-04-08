@@ -14,10 +14,13 @@ export function useChatLog(mode: string) {
   // Initial fetch
   useEffect(() => {
     setLoading(true);
-    fetch(apiUrl("/api/maw-log?limit=500"))
+    fetch(apiUrl("/api/chats?limit=500"))
       .then((r) => r.json())
       .then((data) => {
-        setEntries((data.entries || []).filter((e: MawLogEntry) => e.from && e.to));
+        const mapped: MawLogEntry[] = (data.entries || [])
+          .filter((e: any) => e.from && e.to)
+          .map((e: any) => ({ ts: e.ts, from: e.from, to: e.to, msg: e.msg, ch: e.threadId }));
+        setEntries(mapped);
         setTotal(data.total || 0);
         setLoading(false);
       })

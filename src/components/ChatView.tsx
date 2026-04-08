@@ -58,11 +58,12 @@ export const ChatView = memo(function ChatView() {
     <div className="flex flex-col h-[calc(100vh-48px)]" style={{ background: "#0a0a0f" }}>
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-4 py-2.5 border-b flex-shrink-0 flex-wrap"
+        className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 border-b flex-shrink-0 flex-wrap"
         style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}
       >
-        <h2 className="text-sm font-bold tracking-wider" style={{ color: "#64b5f6" }}>
-          191 AI คุยกันเอง | Build with Oracle
+        <h2 className="text-xs sm:text-sm font-bold tracking-wider" style={{ color: "#64b5f6" }}>
+          <span className="hidden sm:inline">191 AI คุยกันเอง | Build with Oracle</span>
+          <span className="sm:hidden">Oracle Chat</span>
         </h2>
         <span className="text-[10px] font-mono text-white/20">{filtered.length} msgs</span>
         {mode === "live" && (
@@ -72,12 +73,12 @@ export const ChatView = memo(function ChatView() {
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
+          <div className="flex rounded-lg overflow-hidden shrink-0" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
             {(["live", "timeline", "threads"] as const).map((m) => (
               <button
                 key={m}
-                className="px-2.5 py-1 text-[11px] font-mono capitalize transition-colors"
+                className="px-2 sm:px-2.5 py-1.5 sm:py-1 text-[10px] sm:text-[11px] font-mono capitalize transition-colors min-h-[36px] sm:min-h-0"
                 style={{
                   background: mode === m ? "rgba(100,181,246,0.12)" : "transparent",
                   color: mode === m ? "#64b5f6" : "rgba(255,255,255,0.25)",
@@ -89,11 +90,11 @@ export const ChatView = memo(function ChatView() {
             ))}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <select
               value={viewAs}
               onChange={(e) => setViewAs(e.target.value)}
-              className="text-[11px] font-mono rounded-lg px-2 py-1 outline-none cursor-pointer"
+              className="text-[10px] sm:text-[11px] font-mono rounded-lg px-1.5 sm:px-2 py-1.5 sm:py-1 outline-none cursor-pointer min-h-[36px] sm:min-h-0"
               style={{ background: "rgba(255,255,255,0.05)", color: agentColor(viewAs), border: "1px solid rgba(255,255,255,0.08)" }}
             >
               {oracleNames.map((n) => (
@@ -106,7 +107,7 @@ export const ChatView = memo(function ChatView() {
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="text-[11px] font-mono rounded-lg px-2 py-1 outline-none cursor-pointer"
+            className="text-[10px] sm:text-[11px] font-mono rounded-lg px-1.5 sm:px-2 py-1.5 sm:py-1 outline-none cursor-pointer min-h-[36px] sm:min-h-0 shrink-0"
             style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}
           >
             <option value="all">All</option>
@@ -159,11 +160,11 @@ export const ChatView = memo(function ChatView() {
       )}
 
       {/* Chat Input */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-t flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
-        <span className="text-[10px] font-mono flex-shrink-0" style={{ color: "#e8b86d" }}>
+      <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 border-t flex-shrink-0 pb-safe" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
+        <span className="text-[10px] font-mono flex-shrink-0 hidden sm:inline" style={{ color: "#e8b86d" }}>
           nat →
         </span>
-        <span className="text-[10px] font-mono flex-shrink-0" style={{ color: agentColor(viewAs) }}>
+        <span className="text-[10px] font-mono flex-shrink-0 hidden sm:inline" style={{ color: agentColor(viewAs) }}>
           {displayName(viewAs)}
         </span>
         <input
@@ -174,13 +175,13 @@ export const ChatView = memo(function ChatView() {
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
           placeholder="พิมพ์ข้อความ..."
           disabled={sending}
-          className="flex-1 text-sm font-mono rounded-lg px-3 py-1.5 outline-none placeholder:text-white/15"
+          className="flex-1 text-sm font-mono rounded-lg px-3 py-2 sm:py-1.5 outline-none placeholder:text-white/15 min-h-[44px] sm:min-h-0"
           style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.08)" }}
         />
         <button
           onClick={sendMessage}
           disabled={!draft.trim() || sending}
-          className="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all"
+          className="text-[11px] font-mono px-3 py-2 sm:py-1.5 rounded-lg transition-all min-h-[44px] sm:min-h-0"
           style={{
             background: draft.trim() ? "rgba(100,181,246,0.15)" : "rgba(255,255,255,0.03)",
             color: draft.trim() ? "#64b5f6" : "rgba(255,255,255,0.15)",

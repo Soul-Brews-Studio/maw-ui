@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "../lib/apiFetch";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 interface SyncChild {
   name: string;
@@ -35,6 +36,16 @@ export function SoulSyncDashboard() {
   }, []);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  // Real-time: refetch on fleet/sync events via shared WebSocket
+  const fetchStatusRef = useRef(fetchStatus);
+  fetchStatusRef.current = fetchStatus;
+  const handleWsMessage = useCallback((msg: any) => {
+    if (msg.type === "feed" || msg.type === "soul-sync") {
+      fetchStatusRef.current();
+    }
+  }, []);
+  useWebSocket(handleWsMessage);
 
   const handleSync = async (targets?: string[]) => {
     setSyncing(targets?.[0] || "all");
@@ -76,17 +87,17 @@ export function SoulSyncDashboard() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-6xl mx-auto">
+    <div className="px-3 sm:px-6 py-4 sm:py-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-5 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Soul Sync</h1>
-          <p className="font-mono text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>Parent/child config synchronization</p>
+          <h1 className="text-xl sm:text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Soul Sync</h1>
+          <p className="font-mono text-[10px] sm:text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>Parent/child config sync</p>
         </div>
         <button
           onClick={() => setConfirmTarget([])}
           disabled={!!syncing}
-          className="px-5 py-2.5 rounded-xl font-mono text-sm transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+          className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-mono text-xs sm:text-sm transition-all active:scale-95 cursor-pointer disabled:opacity-50 min-h-[44px]"
           style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" }}
         >
           {syncing === "all" ? "Syncing..." : "Sync All"}
@@ -117,16 +128,16 @@ export function SoulSyncDashboard() {
       )}
 
       {/* Parent Hub */}
-      <div className="mb-8">
-        <div className="rounded-2xl p-6" style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
+      <div className="mb-5 sm:mb-8">
+        <div className="rounded-xl sm:rounded-2xl p-4 sm:p-6" style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
           <div className="flex items-center gap-3 mb-4">
-            <span className="text-2xl">🔮</span>
+            <span className="text-xl sm:text-2xl">🔮</span>
             <div>
-              <h2 className="font-mono font-bold" style={{ color: "#c084fc" }}>{tree.parent.name}</h2>
-              <span className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>PARENT</span>
+              <h2 className="font-mono font-bold text-sm sm:text-base" style={{ color: "#c084fc" }}>{tree.parent.name}</h2>
+              <span className="font-mono text-[10px] sm:text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>PARENT</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {Object.entries(tree.parent.config).filter(([k]) => k !== "_file" && k !== "name").map(([key, val]) => (
               <div key={key} className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
                 <span className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{key}</span>
@@ -145,21 +156,21 @@ export function SoulSyncDashboard() {
       </div>
 
       {/* Children */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
         {tree.children.map((child) => {
           const sc = STATUS_COLORS[child.status];
           const isSyncing = syncing === child.name;
           return (
-            <div key={child.name} className="rounded-2xl p-5 transition-all" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
-              <div className="flex items-center justify-between mb-4">
+            <div key={child.name} className="rounded-xl sm:rounded-2xl p-4 sm:p-5 transition-all" style={{ background: sc.bg, border: `1px solid ${sc.border}` }}>
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: sc.color, boxShadow: `0 0 6px ${sc.color}` }} />
-                  <h3 className="font-mono font-bold" style={{ color: sc.color }}>{child.name}</h3>
+                  <h3 className="font-mono font-bold text-sm sm:text-base" style={{ color: sc.color }}>{child.name}</h3>
                 </div>
                 <button
                   onClick={() => setConfirmTarget([child.name])}
                   disabled={!!syncing}
-                  className="px-3 py-1 rounded-lg font-mono text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1.5 sm:py-1 rounded-lg font-mono text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50 min-h-[44px] sm:min-h-0"
                   style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
                 >
                   {isSyncing ? "..." : "Sync"}
