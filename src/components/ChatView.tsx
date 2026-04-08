@@ -4,6 +4,7 @@ import { displayName } from "./chat/types";
 import { ChatGroup, DateSeparator } from "./chat/ChatBubble";
 import { ThreadCard } from "./chat/ThreadCard";
 import { useChatLog, useOracleNames, useFilteredEntries, useTimelineGroups, useLiveGroups, useThreads } from "./chat/useChatLog";
+import { OracleStatus } from "./chat/OracleStatus";
 import { apiUrl } from "../lib/api";
 
 type Mode = "live" | "timeline" | "threads";
@@ -16,6 +17,7 @@ export const ChatView = memo(function ChatView() {
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [lastDispatch, setLastDispatch] = useState<{ status: string; dispatched: boolean } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { entries, total, loading, scrollRef } = useChatLog(mode);
@@ -31,16 +33,22 @@ export const ChatView = memo(function ChatView() {
     const msg = draft.trim();
     if (!msg || sending) return;
     setSending(true);
+    setLastDispatch(null);
     try {
-      await fetch(apiUrl("/api/maw-log"), {
+      const res = await fetch(apiUrl("/api/dispatch"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ from: "nat", to: viewAs, msg }),
       });
+      const data = await res.json();
+      setLastDispatch({ status: data.status || "unknown", dispatched: !!data.dispatched });
       setDraft("");
       inputRef.current?.focus();
+      // Auto-clear dispatch status after 5s
+      setTimeout(() => setLastDispatch(null), 5000);
     } catch (e) {
       console.error("Send failed:", e);
+      setLastDispatch({ status: "error", dispatched: false });
     } finally {
       setSending(false);
     }
@@ -81,16 +89,19 @@ export const ChatView = memo(function ChatView() {
             ))}
           </div>
 
-          <select
-            value={viewAs}
-            onChange={(e) => setViewAs(e.target.value)}
-            className="text-[11px] font-mono rounded-lg px-2 py-1 outline-none cursor-pointer"
-            style={{ background: "rgba(255,255,255,0.05)", color: agentColor(viewAs), border: "1px solid rgba(255,255,255,0.08)" }}
-          >
-            {oracleNames.map((n) => (
-              <option key={n} value={n}>{displayName(n)}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={viewAs}
+              onChange={(e) => setViewAs(e.target.value)}
+              className="text-[11px] font-mono rounded-lg px-2 py-1 outline-none cursor-pointer"
+              style={{ background: "rgba(255,255,255,0.05)", color: agentColor(viewAs), border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              {oracleNames.map((n) => (
+                <option key={n} value={n}>{displayName(n)}</option>
+              ))}
+            </select>
+            <OracleStatus oracle={viewAs} />
+          </div>
 
           <select
             value={filter}
@@ -139,6 +150,13 @@ export const ChatView = memo(function ChatView() {
           </div>
         )}
       </div>
+
+      {/* Dispatch Status */}
+      {lastDispatch && (
+        <div className="px-4 py-1 text-[10px] font-mono" style={{ color: lastDispatch.dispatched ? "#4caf50" : "#ef4444" }}>
+          {lastDispatch.dispatched ? `✓ Dispatched (${lastDispatch.status})` : `✗ Not dispatched: ${lastDispatch.status}`}
+        </div>
+      )}
 
       {/* Chat Input */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-t flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
