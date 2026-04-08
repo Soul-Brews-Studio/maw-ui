@@ -80,6 +80,7 @@ const NAV_ITEMS = [
   { href: "#progress", label: "Progress", id: "progress" },
   { href: "#monitoring", label: "Monitor", id: "monitoring" },
   { href: "#consciousness", label: "🧠 Think", id: "consciousness" },
+  { href: "#schedule", label: "Schedule", id: "schedule" },
   { href: "#config", label: "Config", id: "config" },
 ];
 

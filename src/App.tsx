@@ -22,6 +22,7 @@ import { SoulSyncDashboard } from "./components/SoulSyncDashboard";
 import { ProgressViewer } from "./components/ProgressViewer";
 import { MonitoringView } from "./components/MonitoringView";
 import { ConsciousnessView } from "./components/ConsciousnessView";
+import { ScheduleView } from "./components/ScheduleView";
 import { LoadingSkeleton } from "./components/LoadingSkeleton";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
 import { JumpOverlay } from "./components/JumpOverlay";
@@ -280,6 +281,9 @@ export function App() {
       if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         window.location.hash = "monitoring";
       }
+      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        window.location.hash = "schedule";
+      }
       if (e.key.toLowerCase() === "i" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         setShowInbox(prev => !prev);
       }
@@ -532,6 +536,14 @@ export function App() {
     return (
       <Layout activeView="consciousness" {...layoutProps}>
         <ConsciousnessView />
+      </Layout>
+    );
+  }
+
+  if (route === "schedule") {
+    return (
+      <Layout activeView="schedule" {...layoutProps}>
+        <ScheduleView />
       </Layout>
     );
   }
