@@ -1,9 +1,10 @@
-import { memo, useState } from "react";
+import { memo, useState, useRef, useCallback } from "react";
 import { agentColor } from "../lib/constants";
 import { displayName } from "./chat/types";
 import { ChatGroup, DateSeparator } from "./chat/ChatBubble";
 import { ThreadCard } from "./chat/ThreadCard";
 import { useChatLog, useOracleNames, useFilteredEntries, useTimelineGroups, useLiveGroups, useThreads } from "./chat/useChatLog";
+import { apiUrl } from "../lib/api";
 
 type Mode = "live" | "timeline" | "threads";
 
@@ -13,6 +14,10 @@ export const ChatView = memo(function ChatView() {
   const [mode, setMode] = useState<Mode>("timeline");
   const [highlighted, setHighlighted] = useState<string | null>(null);
 
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const { entries, total, loading, scrollRef } = useChatLog(mode);
   const oracleNames = useOracleNames(entries);
   const filtered = useFilteredEntries(entries, filter);
@@ -21,6 +26,25 @@ export const ChatView = memo(function ChatView() {
   const threads = useThreads(filtered);
 
   const toggleHighlight = (id: string) => setHighlighted(highlighted === id ? null : id);
+
+  const sendMessage = useCallback(async () => {
+    const msg = draft.trim();
+    if (!msg || sending) return;
+    setSending(true);
+    try {
+      await fetch(apiUrl("/api/maw-log"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: "nat", to: viewAs, msg }),
+      });
+      setDraft("");
+      inputRef.current?.focus();
+    } catch (e) {
+      console.error("Send failed:", e);
+    } finally {
+      setSending(false);
+    }
+  }, [draft, sending, viewAs]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-48px)]" style={{ background: "#0a0a0f" }}>
@@ -116,9 +140,37 @@ export const ChatView = memo(function ChatView() {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-center px-4 py-1.5 border-t flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-        <span className="text-[9px] font-mono text-white/10">AI คุยกันเอง | Build with Oracle</span>
+      {/* Chat Input */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-t flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
+        <span className="text-[10px] font-mono flex-shrink-0" style={{ color: "#e8b86d" }}>
+          nat →
+        </span>
+        <span className="text-[10px] font-mono flex-shrink-0" style={{ color: agentColor(viewAs) }}>
+          {displayName(viewAs)}
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+          placeholder="พิมพ์ข้อความ..."
+          disabled={sending}
+          className="flex-1 text-sm font-mono rounded-lg px-3 py-1.5 outline-none placeholder:text-white/15"
+          style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.08)" }}
+        />
+        <button
+          onClick={sendMessage}
+          disabled={!draft.trim() || sending}
+          className="text-[11px] font-mono px-3 py-1.5 rounded-lg transition-all"
+          style={{
+            background: draft.trim() ? "rgba(100,181,246,0.15)" : "rgba(255,255,255,0.03)",
+            color: draft.trim() ? "#64b5f6" : "rgba(255,255,255,0.15)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          {sending ? "..." : "ส่ง"}
+        </button>
       </div>
     </div>
   );
