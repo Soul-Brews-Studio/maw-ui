@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { ansiToHtml } from "../lib/ansi";
 import { roomStyle } from "../lib/constants";
-import { wsUrl } from "../lib/api";
+import { useWebSocket } from "../hooks/useWebSocket";
 import type { Session, AgentState } from "../lib/types";
 
 interface TerminalViewProps {
@@ -16,53 +16,42 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   const [captureHtml, setCaptureHtml] = useState("");
   const [inputBuf, setInputBuf] = useState("");
   const [sendQueue, setSendQueue] = useState<string[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const selectedTargetRef = useRef<string | null>(null);
+  selectedTargetRef.current = selectedTarget;
 
-  // Own WebSocket for capture stream (separate from main fleet WS)
-  useEffect(() => {
-    const ws = new WebSocket(wsUrl("/ws"));
-    wsRef.current = ws;
-
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === "capture") {
-          const out = outputRef.current;
-          const atBottom = out ? out.scrollHeight - out.scrollTop - out.clientHeight < 60 : true;
-          setCaptureHtml(ansiToHtml(data.content || "(empty)"));
-          if (atBottom) requestAnimationFrame(() => out?.scrollTo(0, out.scrollHeight));
-        }
-      } catch {}
-    };
-
-    ws.onclose = () => { wsRef.current = null; };
-    ws.onerror = () => ws.close();
-
-    return () => { ws.close(); wsRef.current = null; };
+  // Shared WebSocket with reconnection for capture stream
+  const handleCapture = useCallback((data: any) => {
+    if (data.type === "capture") {
+      const out = outputRef.current;
+      const atBottom = out ? out.scrollHeight - out.scrollTop - out.clientHeight < 60 : true;
+      setCaptureHtml(ansiToHtml(data.content || "(empty)"));
+      if (atBottom) requestAnimationFrame(() => out?.scrollTo(0, out.scrollHeight));
+    }
   }, []);
+
+  const handleConnect = useCallback((sendFn: (msg: object) => void) => {
+    const target = selectedTargetRef.current;
+    if (target) {
+      sendFn({ type: "subscribe", target });
+      sendFn({ type: "select", target });
+    }
+  }, []);
+
+  const { send: wsSend } = useWebSocket(handleCapture, {
+    types: ["capture"],
+    onConnect: handleConnect,
+  });
 
   // Subscribe when target changes
   useEffect(() => {
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN && selectedTarget) {
-      ws.send(JSON.stringify({ type: "subscribe", target: selectedTarget }));
-      ws.send(JSON.stringify({ type: "select", target: selectedTarget }));
+    if (selectedTarget) {
+      wsSend({ type: "subscribe", target: selectedTarget });
+      wsSend({ type: "select", target: selectedTarget });
     }
-  }, [selectedTarget]);
-
-  // Re-subscribe when WS reconnects
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws) return;
-    const handler = () => {
-      if (selectedTarget) ws.send(JSON.stringify({ type: "subscribe", target: selectedTarget }));
-    };
-    ws.addEventListener("open", handler);
-    return () => ws.removeEventListener("open", handler);
-  }, [selectedTarget]);
+  }, [selectedTarget, wsSend]);
 
   const selectWindow = useCallback((target: string) => {
     setSelectedTarget(target);
@@ -75,17 +64,16 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   // Flush send queue
   useEffect(() => {
     if (sendingRef.current || sendQueue.length === 0) return;
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN || !selectedTarget) return;
+    if (!selectedTarget) return;
 
     sendingRef.current = true;
     const text = sendQueue[0];
-    ws.send(JSON.stringify({ type: "send", target: selectedTarget, text, force: true }));
+    wsSend({ type: "send", target: selectedTarget, text, force: true });
     setTimeout(() => {
       setSendQueue(q => q.slice(1));
       sendingRef.current = false;
     }, 100);
-  }, [sendQueue, selectedTarget]);
+  }, [sendQueue, selectedTarget, wsSend]);
 
   const queueSend = useCallback((text: string) => {
     if (!text || !selectedTarget) return;

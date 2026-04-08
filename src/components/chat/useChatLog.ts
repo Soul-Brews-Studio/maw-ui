@@ -1,12 +1,15 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { type MawLogEntry, formatDate, pairKey } from "./types";
-import { apiUrl, wsUrl } from "../../lib/api";
+import { apiUrl } from "../../lib/api";
+import { useWebSocket } from "../../hooks/useWebSocket";
 
 export function useChatLog(mode: string) {
   const [entries, setEntries] = useState<MawLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   // Initial fetch
   useEffect(() => {
@@ -21,29 +24,20 @@ export function useChatLog(mode: string) {
       .catch(() => setLoading(false));
   }, []);
 
-  // Real-time: listen for WebSocket push of new maw-log entries
-  useEffect(() => {
-    const url = wsUrl("/ws");
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(url);
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.type === "maw-log" && msg.entries) {
-            setEntries(prev => [...prev, ...msg.entries]);
-            setTotal(prev => prev + msg.entries.length);
-            if (mode === "live") {
-              requestAnimationFrame(() => {
-                scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-              });
-            }
-          }
-        } catch {}
-      };
-    } catch {}
-    return () => { ws?.close(); };
-  }, [mode]);
+  // Real-time: shared WebSocket with reconnection
+  const handleMessage = useCallback((msg: any) => {
+    if (msg.type === "maw-log" && msg.entries) {
+      setEntries(prev => [...prev, ...msg.entries]);
+      setTotal(prev => prev + msg.entries.length);
+      if (modeRef.current === "live") {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+        });
+      }
+    }
+  }, []);
+
+  useWebSocket(handleMessage, { types: ["maw-log"] });
 
   return { entries, total, loading, scrollRef };
 }
