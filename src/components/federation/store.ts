@@ -35,6 +35,7 @@ interface FederationStore {
   messageLog: MessageEntry[];
   edgePulses: Record<string, number>; // edge key -> timestamp of last pulse
   showLineage: boolean;
+  showHistoryEdges: boolean;
   layout: string;
 
   setGraph: (agents: AgentNode[], edges: AgentEdge[], particles: Map<string, Particle[]>) => void;
@@ -66,6 +67,7 @@ export const useFederationStore = create<FederationStore>((set) => ({
   messageLog: [],
   edgePulses: {},
   showLineage: false,
+  showHistoryEdges: true,
   layout: "force",
 
   setGraph: (agents, edges, particles) => set({

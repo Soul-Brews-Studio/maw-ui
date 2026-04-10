@@ -3,6 +3,8 @@ import { useFederationStore } from "./store";
 import { machineColor, statusGlow } from "./colors";
 
 const clean = (s: string) => s.replace(/-view$/, "").replace(/-oracle$/, "");
+const label = (name: string, agentIds: Set<string>) =>
+  name === "user" ? "user" : agentIds.has(name) ? `${name} oracle` : name;
 
 function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -31,8 +33,8 @@ export function Sidebar() {
   const selEdges = edges.filter(e => e.source === selected || e.target === selected);
   const lineageEdges = edges.filter(e => e.type === "lineage");
 
-  // Build agent→machine lookup
   const agentMachine = new Map(agents.map(a => [a.id, a.node]));
+  const agentIds = new Set(agents.map(a => a.id));
 
   // Merge messages
   const allMessages = [...liveMessages.map(m => ({
@@ -75,9 +77,9 @@ export function Sidebar() {
                     className={`flex items-center gap-1.5 py-[3px] hover:bg-white/[0.02] rounded transition-colors ${m.live || (Date.now() - m.ts < 300000) ? "" : "opacity-60"}`}
                     title={m.msg || undefined}>
                     <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ background: m.live ? fromColor : "rgba(255,255,255,0.1)" }} />
-                    <span className="text-[9px] font-mono truncate" style={{ color: `${fromColor}99` }}>{m.from}</span>
+                    <span className="text-[9px] font-mono truncate" style={{ color: `${fromColor}99` }}>{label(m.from, agentIds)}</span>
                     <span className="text-[8px] text-white/15 flex-shrink-0">{"\u2192"}</span>
-                    <span className="text-[9px] font-mono truncate" style={{ color: `${toColor}99` }}>{m.to}</span>
+                    <span className="text-[9px] font-mono truncate" style={{ color: `${toColor}99` }}>{label(m.to, agentIds)}</span>
                     <span className="text-[8px] font-mono text-white/15 ml-auto flex-shrink-0 tabular-nums">{timeAgo(m.ts)}</span>
                   </div>
                 );

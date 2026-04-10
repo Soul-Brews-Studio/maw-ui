@@ -11,7 +11,8 @@ const LAYOUTS = ["force", "circle"] as const;
 
 function App() {
   const { connected, mqttConnected } = useFederationData();
-  const { machines, agents, edges, version, plugins, showLineage, toggleLineage, layout, setLayout, setGraph, particles } = useFederationStore();
+  const store = useFederationStore();
+  const { machines, agents, edges, version, plugins, showLineage, toggleLineage, layout, setLayout, setGraph, particles, showHistoryEdges } = store;
 
   const reformat = () => {
     const nextIdx = (LAYOUTS.indexOf(layout as any) + 1) % LAYOUTS.length;
@@ -48,7 +49,7 @@ function App() {
           <span>&middot;</span>
           <span>{totalAgents} agents</span>
           <span>&middot;</span>
-          <span>{msgCount} msg</span>
+          <button onClick={() => store.setState({ showHistoryEdges: !showHistoryEdges })} className={`cursor-pointer hover:text-cyan-400/60 ${showHistoryEdges ? "text-white/20" : "text-white/15 line-through"}`}>{msgCount} msg</button>
           <span>&middot;</span>
           <span>{syncCount} sync</span>
           <span>&middot;</span>
@@ -67,11 +68,13 @@ function App() {
 
       <div className="flex flex-1 overflow-hidden relative">
         <Canvas2D />
-        <button onClick={reformat}
-          className="absolute bottom-4 left-4 px-3 py-2 rounded-lg border text-[10px] font-mono cursor-pointer hover:bg-white/[0.05] transition-colors"
-          style={{ background: "rgba(3,10,24,0.9)", borderColor: "rgba(255,255,255,0.08)", color: "rgba(0,245,212,0.5)" }}>
-{"\u21BB"} reset
-        </button>
+        <div className="absolute bottom-4 left-4 flex gap-2">
+          <button onClick={reformat}
+            className="px-3 py-2 rounded-lg border text-[10px] font-mono cursor-pointer hover:bg-white/[0.05] transition-colors"
+            style={{ background: "rgba(3,10,24,0.9)", borderColor: "rgba(255,255,255,0.08)", color: "rgba(0,245,212,0.5)" }}>
+            {layout === "force" ? "\u26A1" : "\u2B55"} {layout}
+          </button>
+        </div>
         <Sidebar />
       </div>
     </div>

@@ -34,7 +34,7 @@ export function Canvas2D() {
       time += 16;
       const W = canvas!.getBoundingClientRect().width;
       const H = canvas!.getBoundingClientRect().height;
-      const { agents, edges, statuses, selected: sel, hovered: hov, flashes: fl, particles, edgePulses, showLineage } = storeRef.current;
+      const { agents, edges, statuses, selected: sel, hovered: hov, flashes: fl, particles, edgePulses, showLineage, showHistoryEdges } = storeRef.current;
       const cam = camRef.current;
 
       // Background
@@ -52,7 +52,7 @@ export function Canvas2D() {
       drawClusterLabels(ctx, agents);
 
       const byId = new Map(agents.map(a => [a.id, a]));
-      drawEdges(ctx, edges, byId, sel, hov, particles, time, edgePulses, showLineage);
+      drawEdges(ctx, edges, byId, sel, hov, particles, time, edgePulses, showLineage, showHistoryEdges);
       drawAgents(ctx, agents, edges, statuses, sel, hov, fl, time);
 
       ctx.restore();

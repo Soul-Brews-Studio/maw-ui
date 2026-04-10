@@ -57,11 +57,17 @@ export function drawEdges(
   time: number,
   edgePulses?: Record<string, number>,
   showLineage?: boolean,
+  showHistoryEdges?: boolean,
 ) {
   for (const edge of edges) {
     const a = byId.get(edge.source), b = byId.get(edge.target);
     if (!a || !b) continue;
     if (edge.type === "lineage" && !showLineage) continue;
+    // Hide historical message edges unless they have an active pulse
+    if (edge.type === "message" && showHistoryEdges === false) {
+      const ek = [edge.source, edge.target].sort().join("-");
+      if (!edgePulses?.[ek] || (Date.now() - edgePulses[ek]) > 3000) continue;
+    }
 
     const isHighlighted = sel === a.id || sel === b.id || hov === a.id || hov === b.id;
     const dimmed = sel && !isHighlighted;
