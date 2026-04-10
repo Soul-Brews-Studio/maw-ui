@@ -32,6 +32,7 @@ export default defineConfig({
         talk: resolve(__dirname, "talk.html"),
         timemachine: resolve(__dirname, "timemachine.html"),
         shrine: resolve(__dirname, "shrine.html"),
+        workspace: resolve(__dirname, "workspace.html"),
       },
     },
   },
@@ -39,9 +40,9 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     proxy: {
-      "/api": "http://white.local:3456",
-      "/ws/pty": { target: "ws://white.local:3456", ws: true },
-      "/ws": { target: "ws://white.local:3456", ws: true },
+      "/api": "http://10.20.0.7:3456",
+      "/ws/pty": { target: "ws://10.20.0.7:3456", ws: true },
+      "/ws": { target: "ws://10.20.0.7:3456", ws: true },
     },
   },
 });

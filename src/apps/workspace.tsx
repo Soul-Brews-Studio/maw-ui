@@ -1,9 +1,9 @@
 import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "../index.css";
-import { connectMqtt, disconnectMqtt, getMqttClient } from "../lib/mqtt";
-import type { FeedEvent } from "../lib/feed";
-import type { PaneStatus } from "../lib/types";
+import { useWebSocket } from "../hooks/useWebSocket";
+import type { FeedEvent, FeedEventType } from "../lib/feed";
+import type { PaneStatus, Session } from "../lib/types";
 
 // ─── Types ───
 
@@ -65,7 +65,6 @@ function timeAgo(ts: number): string {
 // ─── App ───
 
 function App() {
-  const [connected, setConnected] = useState(false);
   const [nodes, setNodes] = useState<Record<string, Node>>({});
   const [statuses, setStatuses] = useState<Record<string, PaneStatus>>({});
   const [feed, setFeed] = useState<(FeedEvent & { _node?: string })[]>([]);
@@ -81,29 +80,78 @@ function App() {
   // Important events only — skip noisy Pre/PostToolUse
   const IMPORTANT_EVENTS = new Set(["UserPromptSubmit", "Stop", "Notification", "SessionStart", "SessionEnd", "SubagentStart", "SubagentStop"]);
 
-  // Tick for relative times
+  // Feed-based status derivation
+  const BUSY_EVENTS = new Set<FeedEventType>(["PreToolUse", "PostToolUse", "UserPromptSubmit", "SubagentStart", "PostToolUseFailure"]);
+  const STOP_EVENTS = new Set<FeedEventType>(["Stop", "SessionEnd", "TaskCompleted", "Notification"]);
+  const feedLastSeen = useRef<Record<string, number>>({});
+
+  // Tick for relative times + status decay
   useEffect(() => {
-    const iv = setInterval(() => setNow(Date.now()), 5000);
+    const iv = setInterval(() => {
+      setNow(Date.now());
+      // Decay: busy → ready after 15s, ready → idle after 60s
+      const now = Date.now();
+      setStatuses(prev => {
+        const next = { ...prev };
+        let changed = false;
+        for (const [oracle, status] of Object.entries(next)) {
+          const last = feedLastSeen.current[oracle] || 0;
+          if (status === "busy" && last > 0 && now - last > 15_000) {
+            next[oracle] = "ready";
+            changed = true;
+          } else if (status === "ready" && (last === 0 || now - last > 60_000)) {
+            next[oracle] = "idle";
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 5000);
     return () => clearInterval(iv);
   }, []);
 
-  useEffect(() => {
-    connectMqtt(undefined, {
-      onConnect: () => setConnected(true),
-      onDisconnect: () => setConnected(false),
-      onFeed: (oracle, event) => {
-        setMsgCount(n => n + 1);
-        setFeed(prev => [...prev.slice(-149), { ...event, _node: event.host }]);
-      },
-      onStatus: (oracle, status) => {
-        setMsgCount(n => n + 1);
-        setStatuses(prev => ({ ...prev, [oracle]: status as PaneStatus }));
-      },
-      onSessions: (sessions, nodeName) => {
-        setMsgCount(n => n + 1);
-        if (!nodeName) return;
-        const agents: Agent[] = sessions.flatMap((s: any) =>
-          (s.windows || []).map((w: any) => ({
+  // WebSocket message handler
+  const handleMessage = useCallback((data: any) => {
+    if (data.type === "feed") {
+      const event = data.event as FeedEvent;
+      setMsgCount(n => n + 1);
+      setFeed(prev => [...prev.slice(-149), { ...event, _node: event.host }]);
+      // Derive status from feed events
+      const oracleName = event.oracle;
+      if (BUSY_EVENTS.has(event.event)) {
+        feedLastSeen.current[oracleName] = Date.now();
+        setStatuses(prev => prev[oracleName] === "busy" ? prev : { ...prev, [oracleName]: "busy" });
+      } else if (STOP_EVENTS.has(event.event)) {
+        feedLastSeen.current[oracleName] = 0;
+        setStatuses(prev => prev[oracleName] === "ready" ? prev : { ...prev, [oracleName]: "ready" });
+      }
+    } else if (data.type === "feed-history") {
+      const events = (data.events as FeedEvent[]).slice(-150);
+      setFeed(events.map(e => ({ ...e, _node: e.host })));
+      for (const event of events) {
+        const oracleName = event.oracle;
+        if (BUSY_EVENTS.has(event.event)) {
+          feedLastSeen.current[oracleName] = event.ts;
+          setStatuses(prev => ({ ...prev, [oracleName]: "busy" }));
+        } else if (STOP_EVENTS.has(event.event)) {
+          feedLastSeen.current[oracleName] = 0;
+          setStatuses(prev => ({ ...prev, [oracleName]: "ready" }));
+        }
+      }
+      setMsgCount(n => n + events.length);
+    } else if (data.type === "sessions") {
+      const sessions = (data.sessions as Session[]).filter(s => !s.name.startsWith("maw-pty-"));
+      setMsgCount(n => n + 1);
+      // Group sessions by source (node)
+      const byNode: Record<string, Session[]> = {};
+      for (const s of sessions) {
+        const nodeName = s.source && s.source !== "local" ? new URL(s.source).hostname.split(".")[0] : "local";
+        (byNode[nodeName] ||= []).push(s);
+      }
+      const nextNodes: Record<string, Node> = {};
+      for (const [nodeName, nodeSessions] of Object.entries(byNode)) {
+        const agents: Agent[] = nodeSessions.flatMap(s =>
+          s.windows.map(w => ({
             name: w.name,
             target: `${s.name}:${w.index}`,
             session: s.name,
@@ -111,14 +159,13 @@ function App() {
             status: "idle" as PaneStatus,
           }))
         );
-        setNodes(prev => ({
-          ...prev,
-          [nodeName]: { name: nodeName, sessions, agents, online: true, lastSeen: Date.now() },
-        }));
-      },
-    });
-    return () => disconnectMqtt();
+        nextNodes[nodeName] = { name: nodeName, sessions: nodeSessions, agents, online: true, lastSeen: Date.now() };
+      }
+      setNodes(nextNodes);
+    }
   }, []);
+
+  const { connected, reconnecting } = useWebSocket(handleMessage);
 
   // Auto-scroll feed
   useEffect(() => {
@@ -173,8 +220,8 @@ function App() {
           <span className="text-2xl">🌐</span>
           <h1 className="text-xl font-black tracking-tight" style={{ color: "#a78bfa" }}>Workspace</h1>
         </div>
-        <span className={`text-[10px] font-mono px-2 py-1 rounded-full ${connected ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
-          {connected ? "MQTT LIVE" : "OFFLINE"}
+        <span className={`text-[10px] font-mono px-2 py-1 rounded-full ${connected ? "bg-emerald-500/15 text-emerald-400" : reconnecting ? "bg-amber-500/15 text-amber-400" : "bg-red-500/15 text-red-400"}`}>
+          {connected ? "WS LIVE" : reconnecting ? "RECONNECTING" : "OFFLINE"}
         </span>
         <div className="flex items-center gap-3 text-[11px] font-mono text-white/25">
           <span>{nodeList.length} nodes</span>
@@ -220,7 +267,7 @@ function App() {
             <div className="text-center py-12">
               <span className="text-3xl block mb-3">🌐</span>
               <p className="text-sm text-white/30">Waiting for nodes...</p>
-              <p className="text-[10px] text-white/15 mt-1">MQTT topics will populate automatically</p>
+              <p className="text-[10px] text-white/15 mt-1">Sessions will populate automatically</p>
             </div>
           )}
 
@@ -306,7 +353,7 @@ function App() {
             ))}
             {filteredFeed.length === 0 && (
               <div className="flex items-center justify-center h-full text-white/15 text-sm">
-                {connected ? "Waiting for events..." : "Connecting to MQTT broker..."}
+                {connected ? "Waiting for events..." : "Connecting..."}
               </div>
             )}
           </div>
@@ -398,16 +445,13 @@ function JoinWorkspace() {
           onClick={() => {
             if (!name.trim()) return;
             setCreating(true);
-            // Publish workspace creation via MQTT
-            const client = getMqttClient();
-            if (client) {
-              client.publish("maw/v1/workspace/create", JSON.stringify({
-                name: name.trim(),
-                created: Date.now(),
-                creator: "browser",
-              }));
-            }
-            setTimeout(() => { setCreating(false); setName(""); }, 1000);
+            fetch("/api/action", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "workspace-create", name: name.trim() }),
+            })
+              .catch(() => {})
+              .finally(() => { setCreating(false); setName(""); });
           }}
           className="px-3 py-1.5 rounded-lg text-[10px] font-bold active:scale-95"
           style={{ background: "rgba(168,85,247,0.2)", color: "#a78bfa" }}>
