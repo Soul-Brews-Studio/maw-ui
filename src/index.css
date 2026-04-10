@@ -3,7 +3,9 @@
 body {
   background: #0a0a0f;
   color: #e0e0e0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans Thai', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.35;
   overflow-x: hidden;
 }
 
@@ -14,12 +16,22 @@ button, [role="button"], a[href], summary { cursor: pointer; }
 ::-webkit-scrollbar-track { background: #0a0a0f; }
 ::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 3px; }
 
+/* Readable mono font */
+.font-mono, code, pre, [style*="monospace"] {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace !important;
+  letter-spacing: 0.02em;
+}
+
+/* Readability: bump tiny text to match terminal baseline */
+[class*="text-[9px]"] { font-size: 11px !important; }
+[class*="text-[10px]"] { font-size: 12px !important; }
+
 /* Mobile optimizations */
 @media (max-width: 640px) {
   /* Prevent text size adjust on orientation change */
   html { -webkit-text-size-adjust: 100%; }
-  /* Smaller fonts for mobile */
-  .font-mono { font-size: 11px; }
+  /* Readable fonts for mobile */
+  .font-mono { font-size: 13px; }
   /* Touch-friendly tap targets — Apple HIG recommends 44px */
   button, [role="button"], select { min-height: 36px; }
   /* Fix bottom bar overlap with mobile browser chrome */

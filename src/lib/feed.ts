@@ -104,26 +104,26 @@ const TOOL_ICONS: Record<string, string> = {
  * Human-readable one-liner for what the oracle is doing.
  */
 export function describeActivity(event: FeedEvent): string {
+  const msg = event.message || "";
   switch (event.event) {
     case "PreToolUse": {
       // Message format: "ToolName: details..." or "ToolName ✓"
-      const colonIdx = event.message.indexOf(":");
+      const colonIdx = msg.indexOf(":");
       const tool =
-        colonIdx > 0 ? event.message.slice(0, colonIdx).trim() : event.message.split(" ")[0];
+        colonIdx > 0 ? msg.slice(0, colonIdx).trim() : msg.split(" ")[0] || "Tool";
       const icon = TOOL_ICONS[tool] || "🔧";
-      const detail = colonIdx > 0 ? event.message.slice(colonIdx + 1).trim() : "";
+      const detail = colonIdx > 0 ? msg.slice(colonIdx + 1).trim() : "";
       const short = detail.length > 60 ? detail.slice(0, 57) + "..." : detail;
       return short ? `${icon} ${tool}: ${short}` : `${icon} ${tool}`;
     }
     case "PostToolUse":
     case "PostToolUseFailure": {
       const ok = event.event === "PostToolUse";
-      const tool = event.message.replace(/ [✓✗].*$/, "").trim() || "Tool";
+      const tool = msg.replace(/ [✓✗].*$/, "").trim() || "Tool";
       return ok ? `✓ ${tool} done` : `✗ ${tool} failed`;
     }
     case "UserPromptSubmit": {
-      const short =
-        event.message.length > 60 ? event.message.slice(0, 57) + "..." : event.message;
+      const short = msg.length > 60 ? msg.slice(0, 57) + "..." : msg;
       return `💬 ${short || "New prompt"}`;
     }
     case "SubagentStart":
@@ -135,13 +135,12 @@ export function describeActivity(event: FeedEvent): string {
     case "SessionEnd":
       return `⏹ Session ended`;
     case "Stop": {
-      const short =
-        event.message.length > 60 ? event.message.slice(0, 57) + "..." : event.message;
+      const short = msg.length > 60 ? msg.slice(0, 57) + "..." : msg;
       return `⏹ ${short || "Stopped"}`;
     }
     case "Notification":
-      return `🔔 ${event.message || "Notification"}`;
+      return `🔔 ${msg || "Notification"}`;
     default:
-      return event.message || event.event;
+      return msg || event.event;
   }
 }
