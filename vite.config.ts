@@ -5,6 +5,9 @@ import { readFileSync } from "fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
 
+const MAW_HTTP = process.env.VITE_MAW_URL ?? "http://localhost:3456";
+const MAW_WS = MAW_HTTP.replace(/^http/, "ws");
+
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   define: {
@@ -21,9 +24,9 @@ export default defineConfig({
     host: true,
     allowedHosts: ["white.local", "localhost", "127.0.0.1", "0.0.0.0"],
     proxy: {
-      "/api": "http://localhost:3457",
-      "/ws/pty": { target: "ws://localhost:3457", ws: true },
-      "/ws": { target: "ws://localhost:3457", ws: true },
+      "/api": MAW_HTTP,
+      "/ws/pty": { target: MAW_WS, ws: true },
+      "/ws": { target: MAW_WS, ws: true },
     },
   },
 });
