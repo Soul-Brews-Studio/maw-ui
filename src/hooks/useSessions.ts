@@ -37,6 +37,16 @@ export function useSessions() {
     });
   }, []);
 
+  // Fallback: fetch teams via REST on mount in case the WebSocket connection
+  // doesn't deliver them (race on first connect, server restart, etc.).
+  // Ported from c664f95 (Casa Oracle, PR #6).
+  useEffect(() => {
+    fetch("/api/teams")
+      .then(r => r.json())
+      .then(data => setTeams(data.teams || []))
+      .catch(() => {});
+  }, []);
+
   const markBusy = useFleetStore((s) => s.markBusy);
   const markSlept = useFleetStore((s) => s.markSlept);
   const clearSlept = useFleetStore((s) => s.clearSlept);
@@ -180,7 +190,23 @@ export function useSessions() {
       setSessions((data.sessions as Session[]).filter(s => !s.name.startsWith("maw-pty-")));
     } else if (data.type === "recent") {
       const agents: { target: string; name: string; session: string }[] = data.agents || [];
-      if (agents.length > 0) markBusy(agents);
+      if (agents.length > 0) {
+        markBusy(agents);
+        // Set initial "ready" status for agents detected as running Claude.
+        // They may not have fired feed events yet — without this they'd render
+        // as "idle" for up to BUSY_TIMEOUT seconds before the first feed event
+        // bumps them to "ready". Only upgrade idle/missing — never downgrade
+        // from busy/crashed.
+        // Ported from c664f95 (Casa Oracle, PR #6) into the current
+        // useFeedStatusStore architecture.
+        const store = useFeedStatusStore.getState();
+        for (const a of agents) {
+          const current = store.statuses[a.target];
+          if (!current || current === "idle") {
+            store.setStatus(a.target, "ready");
+          }
+        }
+      }
     } else if (data.type === "feed") {
       const feedEvent = data.event as FeedEvent;
       setFeedEvents(prev => {
