@@ -29,6 +29,7 @@ interface FederationStore {
   selected: string | null;
   hovered: string | null;
   version: string;
+  node: string;        // which maw-js node this lens is reading (config.node)
   particles: Map<string, Particle[]>;
   plugins: PluginInfo[];
   liveMessages: LiveMessage[];
@@ -40,6 +41,7 @@ interface FederationStore {
 
   setGraph: (agents: AgentNode[], edges: AgentEdge[], particles: Map<string, Particle[]>) => void;
   setVersion: (v: string) => void;
+  setNode: (node: string) => void;
   setSelected: (id: string | null) => void;
   setHovered: (id: string | null) => void;
   setPlugins: (plugins: PluginInfo[]) => void;
@@ -61,6 +63,7 @@ export const useFederationStore = create<FederationStore>((set) => ({
   selected: null,
   hovered: null,
   version: "",
+  node: "",
   particles: new Map(),
   plugins: [],
   liveMessages: [],
@@ -78,6 +81,8 @@ export const useFederationStore = create<FederationStore>((set) => ({
   }),
 
   setVersion: (version) => set({ version }),
+
+  setNode: (node) => set({ node }),
 
   setSelected: (id) => set((s) => ({ selected: s.selected === id ? null : id })),
 

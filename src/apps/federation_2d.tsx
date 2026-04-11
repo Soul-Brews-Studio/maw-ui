@@ -11,7 +11,7 @@ const LAYOUTS = ["force", "circle"] as const;
 
 function App() {
   const { connected, mqttConnected } = useFederationData();
-  const { machines, agents, edges, version, plugins, showLineage, toggleLineage, layout, setLayout, setGraph, particles, showHistoryEdges } = useFederationStore();
+  const { machines, agents, edges, version, plugins, showLineage, toggleLineage, layout, setLayout, setGraph, particles, showHistoryEdges, node } = useFederationStore();
 
   const reformat = () => {
     const nextIdx = (LAYOUTS.indexOf(layout as any) + 1) % LAYOUTS.length;
@@ -37,6 +37,14 @@ function App() {
           <span className="text-xl">{"\uD83D\uDD78"}</span>
           <h1 className="text-lg font-black tracking-tight" style={{ color: "#00f5d4" }}>Federation Mesh</h1>
         </div>
+        {node && (
+          <span
+            className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300/80 border border-cyan-500/20"
+            title={`This lens is reading /api/config from ${node}. Each maw-js node sees the whole federation; the lens just chooses which one to ask.`}
+          >
+            👁 {node}
+          </span>
+        )}
         <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${connected ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
           {connected ? "WS" : "OFFLINE"}
         </span>
