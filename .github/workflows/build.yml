@@ -1,0 +1,64 @@
+name: build
+
+# Lens CI: every PR and every push to main builds the lens and uploads
+# the dist artifact. The artifact is what `maw ui` (future, mawjs-oracle's
+# repo) will consume — same bytes from CI as you'd get from `npx vite build`
+# locally.
+#
+# Why this exists: PR #8 caught a "fresh clones cannot build" bug where
+# package.json declared `mqtt` but no lockfile pinned it. The build would
+# only work where someone had already run `npm install`. This workflow
+# guards against the same class of regression — if main cannot be built
+# from a fresh checkout, CI fails before merge.
+#
+# Pattern lesson: ground BEFORE shipping. CI is the automated form of
+# "ground before shipping" — the green check IS the curl. See
+# ψ/memory/feedback_ground_before_proposing.md (mawui-oracle vault).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs when a new commit lands on the same PR/branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build lens (vite)
+        run: npx vite build
+
+      - name: Show build output
+        run: |
+          echo "::group::dist tree"
+          find dist -type f -printf '%p  %s bytes\n' | sort
+          echo "::endgroup::"
+          echo "::group::dist size summary"
+          du -sh dist
+          du -sh dist/assets
+          echo "::endgroup::"
+
+      - name: Upload lens artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lens-dist
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
