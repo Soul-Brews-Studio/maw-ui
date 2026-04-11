@@ -62,3 +62,66 @@ jobs:
           path: dist/
           retention-days: 14
           if-no-files-found: error
+
+  # Parallel probe on the self-hosted runner (white.local).
+  # NON-BLOCKING: continue-on-error so a missing/offline runner cannot break
+  # main. The ubuntu-latest job above remains the merge gate. After this probe
+  # has been green for ~3 PRs, we can either:
+  #   (a) drop the ubuntu job and rely solely on self-hosted (faster, free
+  #       quota, can hit LAN resources for integration tests against real
+  #       maw-js endpoints)
+  #   (b) keep both for redundancy
+  #
+  # History note: maw-js had a `runs-on: self-hosted` workflow at one point
+  # (.github/workflows/inbox-auto-add.yml) which was disabled in commit
+  # 14f68f9 with the message "self-hosted runner offline, causing Discord
+  # spam." This probe exists explicitly to verify the runner is reliable
+  # before we trust it with required CI.
+  build-self-hosted:
+    name: build (self-hosted probe, non-blocking)
+    runs-on: self-hosted
+    continue-on-error: true
+    timeout-minutes: 10  # don't let an offline runner hang the workflow
+    steps:
+      - name: Runner info
+        run: |
+          echo "::group::runner environment"
+          echo "Hostname: $(hostname 2>/dev/null || echo unknown)"
+          echo "OS:       $(uname -a 2>/dev/null || echo unknown)"
+          echo "Whoami:   $(whoami 2>/dev/null || echo unknown)"
+          echo "PWD:      $(pwd)"
+          echo "PATH:     $PATH"
+          echo "Node:     $(node --version 2>/dev/null || echo 'not in PATH')"
+          echo "npm:      $(npm --version 2>/dev/null || echo 'not in PATH')"
+          echo "Git:      $(git --version 2>/dev/null || echo 'not installed')"
+          echo "::endgroup::"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build lens (vite)
+        run: npx vite build
+
+      - name: Show build output
+        run: |
+          echo "::group::dist size summary (self-hosted)"
+          du -sh dist
+          du -sh dist/assets
+          echo "::endgroup::"
+
+      - name: Upload lens artifact (self-hosted)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lens-dist-self-hosted
+          path: dist/
+          retention-days: 7
+          if-no-files-found: warn
