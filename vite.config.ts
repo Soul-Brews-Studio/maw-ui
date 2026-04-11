@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 import { resolve } from "path";
 import pkg from "./package.json";
 
+const MAW_HTTP = process.env.VITE_MAW_URL ?? "http://localhost:3456";
+const MAW_WS = MAW_HTTP.replace(/^http/, "ws");
+
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   define: {
@@ -29,6 +32,7 @@ export default defineConfig({
         inbox: resolve(__dirname, "inbox.html"),
         arena: resolve(__dirname, "arena.html"),
         federation: resolve(__dirname, "federation.html"),
+        federation_2d: resolve(__dirname, "federation_2d.html"),
         talk: resolve(__dirname, "talk.html"),
         timemachine: resolve(__dirname, "timemachine.html"),
         shrine: resolve(__dirname, "shrine.html"),
@@ -40,9 +44,9 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     proxy: {
-      "/api": "http://10.20.0.7:3456",
-      "/ws/pty": { target: "ws://10.20.0.7:3456", ws: true },
-      "/ws": { target: "ws://10.20.0.7:3456", ws: true },
+      "/api": MAW_HTTP,
+      "/ws/pty": { target: MAW_WS, ws: true },
+      "/ws": { target: MAW_WS, ws: true },
     },
   },
 });

@@ -25,7 +25,7 @@ export function PinLock({ children }: { children: React.ReactNode }) {
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => { setEnabled(false); setUnlocked(true); setLoading(false); });
   }, [unlocked]);
 
   const handleDigit = useCallback((d: string) => {
@@ -43,6 +43,7 @@ export function PinLock({ children }: { children: React.ReactNode }) {
           .then(data => {
             if (data.ok) {
               localStorage.setItem(STORAGE_KEY, "1");
+              window.location.hash = "mission";
               setUnlocked(true);
             } else {
               setError(true);

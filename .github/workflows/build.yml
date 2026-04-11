@@ -1,0 +1,127 @@
+name: build
+
+# Lens CI: every PR and every push to main builds the lens and uploads
+# the dist artifact. The artifact is what `maw ui` (future, mawjs-oracle's
+# repo) will consume — same bytes from CI as you'd get from `npx vite build`
+# locally.
+#
+# Why this exists: PR #8 caught a "fresh clones cannot build" bug where
+# package.json declared `mqtt` but no lockfile pinned it. The build would
+# only work where someone had already run `npm install`. This workflow
+# guards against the same class of regression — if main cannot be built
+# from a fresh checkout, CI fails before merge.
+#
+# Pattern lesson: ground BEFORE shipping. CI is the automated form of
+# "ground before shipping" — the green check IS the curl. See
+# ψ/memory/feedback_ground_before_proposing.md (mawui-oracle vault).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs when a new commit lands on the same PR/branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (node 20)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build lens (vite)
+        run: npx vite build
+
+      - name: Show build output
+        run: |
+          echo "::group::dist tree"
+          find dist -type f -printf '%p  %s bytes\n' | sort
+          echo "::endgroup::"
+          echo "::group::dist size summary"
+          du -sh dist
+          du -sh dist/assets
+          echo "::endgroup::"
+
+      - name: Upload lens artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lens-dist
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
+
+  # Parallel probe on the self-hosted runner (white.local).
+  # NON-BLOCKING: continue-on-error so a missing/offline runner cannot break
+  # main. The ubuntu-latest job above remains the merge gate. After this probe
+  # has been green for ~3 PRs, we can either:
+  #   (a) drop the ubuntu job and rely solely on self-hosted (faster, free
+  #       quota, can hit LAN resources for integration tests against real
+  #       maw-js endpoints)
+  #   (b) keep both for redundancy
+  #
+  # History note: maw-js had a `runs-on: self-hosted` workflow at one point
+  # (.github/workflows/inbox-auto-add.yml) which was disabled in commit
+  # 14f68f9 with the message "self-hosted runner offline, causing Discord
+  # spam." This probe exists explicitly to verify the runner is reliable
+  # before we trust it with required CI.
+  build-self-hosted:
+    name: build (self-hosted probe, non-blocking)
+    runs-on: self-hosted
+    continue-on-error: true
+    timeout-minutes: 10  # don't let an offline runner hang the workflow
+    steps:
+      - name: Runner info
+        run: |
+          echo "::group::runner environment"
+          echo "Hostname: $(hostname 2>/dev/null || echo unknown)"
+          echo "OS:       $(uname -a 2>/dev/null || echo unknown)"
+          echo "Whoami:   $(whoami 2>/dev/null || echo unknown)"
+          echo "PWD:      $(pwd)"
+          echo "PATH:     $PATH"
+          echo "Node:     $(node --version 2>/dev/null || echo 'not in PATH')"
+          echo "npm:      $(npm --version 2>/dev/null || echo 'not in PATH')"
+          echo "Git:      $(git --version 2>/dev/null || echo 'not installed')"
+          echo "::endgroup::"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build lens (vite)
+        run: npx vite build
+
+      - name: Show build output
+        run: |
+          echo "::group::dist size summary (self-hosted)"
+          du -sh dist
+          du -sh dist/assets
+          echo "::endgroup::"
+
+      - name: Upload lens artifact (self-hosted)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lens-dist-self-hosted
+          path: dist/
+          retention-days: 7
+          if-no-files-found: warn
