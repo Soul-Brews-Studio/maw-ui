@@ -180,6 +180,7 @@ function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   // version was sourced from /api/identity which is dead on stale pm2 — drop until restored.
+  const [node, setNode] = useState("");  // which maw-js node this lens is reading (config.node)
   const [machines, setMachines] = useState<string[]>([]);
   const [lineages, setLineages] = useState<{ parent: string; child: string }[]>([]);
 
@@ -899,6 +900,9 @@ function App() {
         fetch(apiUrl("/api/feed?limit=200")).then(r => r.json()).catch(() => null),
       ]);
 
+      // Identity: which maw-js node is this lens reading?
+      if (config?.node) setNode(config.node);
+
       const a2m: Record<string, string> = {};
       if (config?.agents) for (const [a, m] of Object.entries(config.agents)) a2m[a] = m as string;
 
@@ -1083,6 +1087,14 @@ function App() {
           <span className="text-xl">🕸</span>
           <h1 className="text-lg font-black tracking-tight" style={{ color: "#00f5d4" }}>Federation Mesh</h1>
         </div>
+        {node && (
+          <span
+            className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300/80 border border-cyan-500/20"
+            title={`This lens is reading /api/config from ${node}. Each maw-js node sees the whole federation; the lens just chooses which one to ask.`}
+          >
+            👁 {node}
+          </span>
+        )}
         <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${connected ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
           {connected ? "LIVE" : "OFFLINE"}
         </span>

@@ -8,7 +8,7 @@ import type { AgentNode, AgentEdge, Particle } from "../components/federation/ty
 import type { FeedEvent } from "../lib/feed";
 
 export function useFederationData() {
-  const { setGraph, setPlugins, setMessageLog, handleFeedEvent, handleFeedHistory, handleLiveMessage } = useFederationStore();
+  const { setGraph, setNode, setPlugins, setMessageLog, handleFeedEvent, handleFeedHistory, handleLiveMessage } = useFederationStore();
 
   const handleMessage = useCallback((data: any) => {
     if (data.type === "feed") {
@@ -70,6 +70,8 @@ export function useFederationData() {
         fetch(apiUrl("/api/plugins")).then(r => r.json()).catch(() => null),
       ]);
 
+      // Identity: which maw-js node is this lens reading? (config.node = "oracle-world", "white", ...)
+      if (config?.node) setNode(config.node);
       if (pluginData?.plugins) setPlugins(pluginData.plugins);
 
       // Load message history for the live panel — derived from MessageSend feed events.
@@ -207,7 +209,7 @@ export function useFederationData() {
     load();
     const iv = setInterval(load, 60_000);
     return () => clearInterval(iv);
-  }, [setGraph]);
+  }, [setGraph, setNode]);
 
   return { connected, mqttConnected };
 }
