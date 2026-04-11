@@ -8,7 +8,7 @@ import type { AgentNode, AgentEdge, Particle } from "../components/federation/ty
 import type { FeedEvent } from "../lib/feed";
 
 export function useFederationData() {
-  const { setGraph, setVersion, setPlugins, setMessageLog, handleFeedEvent, handleFeedHistory, handleLiveMessage } = useFederationStore();
+  const { setGraph, setPlugins, setMessageLog, handleFeedEvent, handleFeedHistory, handleLiveMessage } = useFederationStore();
 
   const handleMessage = useCallback((data: any) => {
     if (data.type === "feed") {
@@ -57,28 +57,39 @@ export function useFederationData() {
 
   useEffect(() => {
     async function load() {
-      const [identity, config, fleet, messages, pluginData] = await Promise.all([
-        fetch(apiUrl("/api/identity")).then(r => r.json()).catch(() => null),
+      // Canonical v1 endpoints — see ψ/memory/feedback_ground_before_proposing.md
+      // for the drift incident that locked this mapping.
+      //   /api/config            — agents map + namedPeers + node identity
+      //   /api/fleet-config      — fleet entries with sync_peers + budded_from
+      //   /api/feed?limit=200    — live event log (replaces the old /api/messages)
+      //   /api/plugins           — optional, may 404 on stale pm2 (graceful degrade)
+      const [config, fleetConfig, feed, pluginData] = await Promise.all([
         fetch(apiUrl("/api/config")).then(r => r.json()).catch(() => null),
-        fetch(apiUrl("/api/fleet")).then(r => r.json()).catch(() => null),
-        fetch(apiUrl("/api/messages?limit=500")).then(r => r.json()).catch(() => null),
+        fetch(apiUrl("/api/fleet-config")).then(r => r.json()).catch(() => null),
+        fetch(apiUrl("/api/feed?limit=200")).then(r => r.json()).catch(() => null),
         fetch(apiUrl("/api/plugins")).then(r => r.json()).catch(() => null),
       ]);
 
-      if (identity?.version) setVersion(identity.version);
       if (pluginData?.plugins) setPlugins(pluginData.plugins);
 
-      // Load message history for the live panel
-      if (messages?.messages) {
+      // Load message history for the live panel — derived from MessageSend feed events.
+      // Feed event message shape: "{target}: {body}", oracle = sender.
+      if (feed?.events) {
         const clean = (s: string) => (s || "").replace(/^.*:/, "").replace(/-oracle$/, "").replace(/-view$/, "");
-        const log = messages.messages
-          .filter((m: any) => m.ch === "hey") // only maw hey messages
-          .map((m: any) => ({
-            from: clean(m.from),
-            to: clean(m.to),
-            msg: (m.msg || "").slice(0, 120),
-            ts: new Date(m.ts).getTime(),
-          }))
+        const log = feed.events
+          .filter((e: any) => e.event === "MessageSend" && e.message)
+          .map((e: any) => {
+            const colonIdx = e.message.indexOf(": ");
+            const toRaw = colonIdx > 0 ? e.message.slice(0, colonIdx) : "";
+            const body = colonIdx > 0 ? e.message.slice(colonIdx + 2) : e.message;
+            return {
+              from: clean(e.oracle),
+              to: clean(toRaw),
+              msg: body.slice(0, 120),
+              ts: e.ts,
+            };
+          })
+          .filter((m: any) => m.from && m.to)
           .reverse(); // newest first
         setMessageLog(log);
       }
@@ -87,16 +98,24 @@ export function useFederationData() {
       const a2m: Record<string, string> = {};
       if (config?.agents) for (const [a, m] of Object.entries(config.agents)) a2m[a] = m as string;
 
-      // Fleet data -> sync_peers, lineage
+      // Fleet data -> sync_peers, lineage. /api/fleet-config returns {configs: [...]}.
+      // budded_from is per-entry; children are computed by inverting client-side
+      // (the new endpoint does not carry a children field — confirmed with mawjs-oracle).
       const fleetMap: Record<string, { syncPeers: string[]; buddedFrom?: string; children: string[] }> = {};
-      if (fleet?.fleet) {
-        for (const f of fleet.fleet) {
+      if (fleetConfig?.configs) {
+        for (const f of fleetConfig.configs) {
           const name = f.windows?.[0]?.name?.replace(/-oracle$/, "") || f.name.replace(/^\d+-/, "");
           fleetMap[name] = {
             syncPeers: (f.sync_peers || []).filter((p: string) => p !== "--help"),
             buddedFrom: f.budded_from || undefined,
-            children: f.children || [],
+            children: [],
           };
+        }
+        // Invert budded_from -> children
+        for (const [child, entry] of Object.entries(fleetMap)) {
+          if (entry.buddedFrom && fleetMap[entry.buddedFrom]) {
+            fleetMap[entry.buddedFrom].children.push(child);
+          }
         }
       }
 
@@ -145,12 +164,16 @@ export function useFederationData() {
         }
       }
 
-      // Message edges
-      if (messages?.messages) {
+      // Message edges — derived from /api/feed MessageSend events.
+      // Same data as the old /api/messages, different shape.
+      if (feed?.events) {
         const msgCounts: Record<string, number> = {};
-        for (const m of messages.messages) {
-          const from = m.from?.replace(/^.*:/, "").replace(/-oracle$/, "") || "";
-          const to = m.to?.replace(/^.*:/, "").replace(/-oracle$/, "") || "";
+        for (const e of feed.events) {
+          if (e.event !== "MessageSend" || !e.message) continue;
+          const colonIdx = e.message.indexOf(": ");
+          if (colonIdx <= 0) continue;
+          const from = e.oracle?.replace(/^.*:/, "").replace(/-oracle$/, "") || "";
+          const to = e.message.slice(0, colonIdx).replace(/^.*:/, "").replace(/-oracle$/, "");
           if (from && to && seen.has(from) && seen.has(to) && from !== to) {
             const key = [from, to].sort().join("-");
             msgCounts[key] = (msgCounts[key] || 0) + 1;
@@ -184,7 +207,7 @@ export function useFederationData() {
     load();
     const iv = setInterval(load, 60_000);
     return () => clearInterval(iv);
-  }, [setGraph, setVersion]);
+  }, [setGraph]);
 
   return { connected, mqttConnected };
 }

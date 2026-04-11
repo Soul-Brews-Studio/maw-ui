@@ -179,7 +179,7 @@ function App() {
   const [agentStatuses, setAgentStatuses] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [version, setVersion] = useState("");
+  // version was sourced from /api/identity which is dead on stale pm2 — drop until restored.
   const [machines, setMachines] = useState<string[]>([]);
   const [lineages, setLineages] = useState<{ parent: string; child: string }[]>([]);
 
@@ -890,29 +890,34 @@ function App() {
   }, [agents, edges]);
 
   // ─── Data fetching ───
+  // Canonical v1 endpoints — see ψ/memory/feedback_ground_before_proposing.md
   useEffect(() => {
     async function load() {
-      const [identity, config, fleet, messages] = await Promise.all([
-        fetch(apiUrl("/api/identity")).then(r => r.json()).catch(() => null),
+      const [config, fleetConfig, feed] = await Promise.all([
         fetch(apiUrl("/api/config")).then(r => r.json()).catch(() => null),
-        fetch(apiUrl("/api/fleet")).then(r => r.json()).catch(() => null),
-        fetch(apiUrl("/api/messages?limit=500")).then(r => r.json()).catch(() => null),
+        fetch(apiUrl("/api/fleet-config")).then(r => r.json()).catch(() => null),
+        fetch(apiUrl("/api/feed?limit=200")).then(r => r.json()).catch(() => null),
       ]);
-
-      if (identity?.version) setVersion(identity.version);
 
       const a2m: Record<string, string> = {};
       if (config?.agents) for (const [a, m] of Object.entries(config.agents)) a2m[a] = m as string;
 
+      // /api/fleet-config returns {configs: [...]}. budded_from is per-entry;
+      // children are computed by inverting client-side (no children field on the new endpoint).
       const fleetMap: Record<string, { syncPeers: string[]; buddedFrom?: string; children: string[] }> = {};
-      if (fleet?.fleet) {
-        for (const f of fleet.fleet) {
+      if (fleetConfig?.configs) {
+        for (const f of fleetConfig.configs) {
           const name = f.windows?.[0]?.name?.replace(/-oracle$/, "") || f.name.replace(/^\d+-/, "");
           fleetMap[name] = {
             syncPeers: (f.sync_peers || []).filter((p: string) => p !== "--help"),
             buddedFrom: f.budded_from || undefined,
-            children: f.children || [],
+            children: [],
           };
+        }
+        for (const [child, entry] of Object.entries(fleetMap)) {
+          if (entry.buddedFrom && fleetMap[entry.buddedFrom]) {
+            fleetMap[entry.buddedFrom].children.push(child);
+          }
         }
       }
 
@@ -959,11 +964,15 @@ function App() {
         }
       }
 
-      if (messages?.messages) {
+      // Message edges — derived from /api/feed MessageSend events.
+      if (feed?.events) {
         const msgCounts: Record<string, number> = {};
-        for (const m of messages.messages) {
-          const from = m.from?.replace(/^.*:/, "").replace(/-oracle$/, "") || "";
-          const to = m.to?.replace(/^.*:/, "").replace(/-oracle$/, "") || "";
+        for (const e of feed.events) {
+          if (e.event !== "MessageSend" || !e.message) continue;
+          const colonIdx = e.message.indexOf(": ");
+          if (colonIdx <= 0) continue;
+          const from = e.oracle?.replace(/^.*:/, "").replace(/-oracle$/, "") || "";
+          const to = e.message.slice(0, colonIdx).replace(/^.*:/, "").replace(/-oracle$/, "");
           if (from && to && seen.has(from) && seen.has(to) && from !== to) {
             const key = [from, to].sort().join("-");
             msgCounts[key] = (msgCounts[key] || 0) + 1;
@@ -1087,7 +1096,6 @@ function App() {
           <span>{edges.filter(e => e.type === "sync").length} sync</span>
           <span>·</span>
           <span className="text-cyan-400/40">{lineages.length} lineage</span>
-          {version && <><span>·</span><span>v{version}</span></>}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           {machines.map(m => (
