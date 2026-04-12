@@ -77,6 +77,7 @@ const NAV_ITEMS = [
   { href: "#chat", label: "Chat", id: "chat" },
   { href: "#teams", label: "Teams", id: "teams" },
   { href: "#federation", label: "Fed", id: "federation" },
+  { href: "#dashboard-pro", label: "Pro", id: "dashboard-pro" },
   // Board, Loops, Jarvis, Fame, BoB removed — no upstream backends
   // (from BankCurfew's fork, PR #19). Files kept per Nothing is Deleted.
   { href: "#config", label: "Config", id: "config" },

@@ -19,6 +19,7 @@ import { WorktreeView } from "./components/WorktreeView";
 import { ChatView } from "./components/ChatView";
 import { DashboardView } from "./components/DashboardView";
 import FederationView from "./components/FederationView";
+import DashboardPro from "./components/DashboardPro";
 // BoBFaceView, BoardView, LoopsView, JarvisView, HallOfFameView, IPadDashboard
 // removed from nav — no upstream backends. Files kept per Nothing is Deleted.
 import { LoadingSkeleton } from "./components/LoadingSkeleton";
@@ -517,6 +518,14 @@ export function App() {
     return (
       <Layout activeView="federation" {...layoutProps}>
         <FederationView />
+      </Layout>
+    );
+  }
+
+  if (route === "dashboard-pro") {
+    return (
+      <Layout activeView="dashboard-pro" {...layoutProps}>
+        <DashboardPro />
       </Layout>
     );
   }

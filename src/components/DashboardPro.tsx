@@ -1,0 +1,285 @@
+import { useState, useEffect, useCallback } from "react";
+import { apiUrl } from "../lib/api";
+
+// ---- Types (grounded against real API responses) -------------------------
+
+interface Peer {
+  url: string;
+  reachable: boolean;
+  latency: number;
+  node?: string;
+  agents?: string[];
+  clockDeltaMs?: number;
+  clockWarning?: boolean;
+}
+
+interface FedStatus {
+  localUrl: string;
+  peers: Peer[];
+  totalPeers: number;
+  reachablePeers: number;
+  clockHealth?: { clockUtc: string; timezone: string; uptimeSeconds: number };
+}
+
+interface Plugin {
+  name: string;
+  type: string;
+  source: string;
+  events: number;
+  errors: number;
+  lastEvent: string;
+}
+
+interface PluginStatus {
+  startedAt: string;
+  plugins: Plugin[];
+}
+
+interface FeedEvent {
+  event: string;
+  oracle: string;
+  message?: string;
+  timestamp?: string;
+}
+
+interface Session {
+  name: string;
+  windows: Array<{ name: string; active: boolean }>;
+}
+
+// ---- Data hook -----------------------------------------------------------
+
+function useDashboardData() {
+  const [fed, setFed] = useState<FedStatus | null>(null);
+  const [plugins, setPlugins] = useState<PluginStatus | null>(null);
+  const [feed, setFeed] = useState<FeedEvent[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    const [fedRes, plugRes, feedRes, sessRes] = await Promise.allSettled([
+      fetch(apiUrl("/api/federation/status")).then((r) => (r.ok ? r.json() : null)),
+      fetch(apiUrl("/api/plugins")).then((r) => (r.ok ? r.json() : null)),
+      fetch(apiUrl("/api/feed?limit=20")).then((r) => (r.ok ? r.json() : null)),
+      fetch(apiUrl("/api/sessions")).then((r) => (r.ok ? r.json() : null)),
+    ]);
+    if (fedRes.status === "fulfilled" && fedRes.value) setFed(fedRes.value);
+    if (plugRes.status === "fulfilled" && plugRes.value) setPlugins(plugRes.value);
+    if (feedRes.status === "fulfilled" && feedRes.value) {
+      const events = feedRes.value.events ?? feedRes.value;
+      setFeed(Array.isArray(events) ? events : []);
+    }
+    if (sessRes.status === "fulfilled" && sessRes.value) {
+      const s = Array.isArray(sessRes.value) ? sessRes.value : sessRes.value.sessions ?? [];
+      setSessions(s);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const iv = setInterval(refresh, 15_000);
+    return () => clearInterval(iv);
+  }, [refresh]);
+
+  return { fed, plugins, feed, sessions, loading, refresh };
+}
+
+// ---- Panels --------------------------------------------------------------
+
+function PeerHealthPanel({ fed }: { fed: FedStatus | null }) {
+  if (!fed) return <PanelShell title="Peers" subtitle="loading..." />;
+  return (
+    <PanelShell title="Peers" subtitle={`${fed.reachablePeers}/${fed.totalPeers} reachable`}>
+      <div className="space-y-1.5">
+        {fed.peers.map((p) => (
+          <div key={p.url} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: p.reachable ? "#22c55e" : "#ef4444" }}
+              />
+              <span className="text-white/70">{p.node || p.url.replace(/^https?:\/\//, "")}</span>
+              {p.agents && <span className="text-white/30">({p.agents.length})</span>}
+            </div>
+            <span className="text-white/40 font-mono">
+              {p.reachable ? `${p.latency}ms` : "offline"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </PanelShell>
+  );
+}
+
+function ClockDriftPanel({ fed }: { fed: FedStatus | null }) {
+  if (!fed) return <PanelShell title="Clock" subtitle="loading..." />;
+  const ch = fed.clockHealth;
+  return (
+    <PanelShell
+      title="Clock Health"
+      subtitle={ch ? `up ${formatUptime(ch.uptimeSeconds)}` : "no data"}
+    >
+      <div className="space-y-1.5">
+        {ch && (
+          <div className="text-xs text-white/40 mb-2">
+            {ch.timezone} &middot; {new Date(ch.clockUtc).toLocaleTimeString()}
+          </div>
+        )}
+        {fed.peers.map((p) => {
+          const drift = p.clockDeltaMs;
+          const warn = p.clockWarning;
+          return (
+            <div key={p.url} className="flex items-center justify-between text-xs">
+              <span className="text-white/70">{p.node || "?"}</span>
+              <span
+                className="font-mono"
+                style={{ color: warn ? "#f59e0b" : drift != null ? "#22c55e" : "#666" }}
+              >
+                {drift != null ? `${drift > 0 ? "+" : ""}${drift}ms` : "—"}
+                {warn && " ⚠"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </PanelShell>
+  );
+}
+
+function AgentGridPanel({ sessions }: { sessions: Session[] }) {
+  const total = sessions.reduce((n, s) => n + s.windows.length, 0);
+  return (
+    <PanelShell title="Agents" subtitle={`${total} across ${sessions.length} sessions`}>
+      <div className="flex flex-wrap gap-1">
+        {sessions.flatMap((s) =>
+          s.windows.map((w) => (
+            <span
+              key={`${s.name}-${w.name}`}
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono"
+              style={{
+                backgroundColor: w.active ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
+                color: w.active ? "#22c55e" : "rgba(255,255,255,0.3)",
+              }}
+            >
+              {w.name.replace(/-oracle$/, "")}
+            </span>
+          )),
+        )}
+      </div>
+    </PanelShell>
+  );
+}
+
+function PluginPanel({ plugins }: { plugins: PluginStatus | null }) {
+  if (!plugins) return <PanelShell title="Plugins" subtitle="loading..." />;
+  const totalEvents = plugins.plugins.reduce((n, p) => n + p.events, 0);
+  const totalErrors = plugins.plugins.reduce((n, p) => n + p.errors, 0);
+  return (
+    <PanelShell
+      title="Plugins"
+      subtitle={`${plugins.plugins.length} loaded · ${totalEvents} events${totalErrors > 0 ? ` · ${totalErrors} errors` : ""}`}
+    >
+      <div className="space-y-1">
+        {plugins.plugins.map((p) => (
+          <div key={p.name} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: p.errors > 0 ? "#ef4444" : "#22c55e" }}
+              />
+              <span className="text-white/60">{p.name.replace(/\.ts$/, "")}</span>
+              <span className="text-white/20 text-[10px]">{p.source}</span>
+            </div>
+            <span className="text-white/40 font-mono text-[10px]">
+              {p.events}ev{p.errors > 0 && <span className="text-red-400 ml-1">{p.errors}err</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+    </PanelShell>
+  );
+}
+
+function LiveFeedPanel({ feed }: { feed: FeedEvent[] }) {
+  return (
+    <PanelShell title="Live Feed" subtitle={`${feed.length} recent events`}>
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {feed.length === 0 && <div className="text-xs text-white/20">no events yet</div>}
+        {feed.map((e, i) => (
+          <div key={i} className="text-[10px] leading-tight">
+            <span className="text-white/30">{e.event}</span>{" "}
+            <span className="text-cyan-400/70">{e.oracle?.replace(/-oracle$/, "")}</span>
+            {e.message && (
+              <span className="text-white/20 ml-1">
+                {e.message.length > 80 ? e.message.slice(0, 80) + "…" : e.message}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </PanelShell>
+  );
+}
+
+// ---- Shell ---------------------------------------------------------------
+
+function PanelShell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-white/60">{title}</span>
+        {subtitle && <span className="text-[10px] text-white/30">{subtitle}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function formatUptime(seconds: number): string {
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
+}
+
+// ---- Main ----------------------------------------------------------------
+
+export default function DashboardPro() {
+  const { fed, plugins, feed, sessions, loading, refresh } = useDashboardData();
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-white/90">Dashboard Pro</h2>
+          <span className="text-[10px] text-white/30 px-2 py-0.5 rounded border border-white/10">
+            {loading ? "loading..." : "live"}
+          </span>
+        </div>
+        <button
+          onClick={refresh}
+          className="px-2 py-1 text-xs rounded border border-white/10 text-white/40 hover:text-white/60 hover:border-white/20 transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <PeerHealthPanel fed={fed} />
+        <ClockDriftPanel fed={fed} />
+        <AgentGridPanel sessions={sessions} />
+        <PluginPanel plugins={plugins} />
+      </div>
+
+      <LiveFeedPanel feed={feed} />
+    </div>
+  );
+}
