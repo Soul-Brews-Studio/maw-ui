@@ -68,8 +68,15 @@ export function LoopsView({ connected }: { connected: boolean }) {
 
   const fetchLoops = useCallback(() => {
     fetch("/api/loops")
-      .then(r => r.json())
+      .then(r => {
+        // Guard r.json() with r.ok — without this, a 404 from a maw-js
+        // that doesn't have /api/loops returns plain text "404 Not Found"
+        // and JSON.parse blows up at position 4 ('N' after parsing '404').
+        if (!r.ok) return null;
+        return r.json();
+      })
       .then(data => {
+        if (!data) { setLoading(false); return; }
         setLoops(data.loops || []);
         setEngineEnabled(data.enabled);
         setLoading(false);
@@ -80,7 +87,7 @@ export function LoopsView({ connected }: { connected: boolean }) {
   const fetchHistory = useCallback((loopId?: string) => {
     const url = loopId ? `/api/loops/history?loopId=${loopId}&limit=30` : "/api/loops/history?limit=50";
     fetch(url)
-      .then(r => r.json())
+      .then(r => (r.ok ? r.json() : null))
       .then(data => setHistory(Array.isArray(data) ? data.reverse() : []))
       .catch(() => {});
   }, []);

@@ -7,8 +7,8 @@
 
 export interface FederationConfig {
   node: string;
-  agents: Record<string, string>; // agentName → nodeName
-  namedPeers: Record<string, string>; // peerName → url
+  agents: Record<string, string>; // agentName → nodeName ("local" means the current node)
+  namedPeers: Array<{ name: string; url: string }>; // matches maw-js shape (array, not Record)
 }
 
 export interface PeerStatus {
@@ -43,7 +43,13 @@ const FALLBACK_NODE_COLORS = [
   { accent: "#ec407a", bg: "#281420" },
 ];
 
-export function nodeColor(nodeName: string): { accent: string; bg: string; label: string } {
+export function nodeColor(nodeName: string | undefined | null): { accent: string; bg: string; label: string } {
+  // Defense in depth: graceful fallback when upstream passes undefined/empty
+  // (e.g. peer.name when the API doesn't include a name field). Prevents the
+  // whole view from crashing on bad peer data.
+  if (!nodeName || typeof nodeName !== "string") {
+    return { accent: "#888888", bg: "#1a1a1a", label: "?" };
+  }
   if (NODE_COLORS[nodeName]) return NODE_COLORS[nodeName];
   let h = 0;
   for (let i = 0; i < nodeName.length; i++) h = ((h << 5) - h + nodeName.charCodeAt(i)) | 0;

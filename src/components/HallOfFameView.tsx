@@ -108,9 +108,29 @@ export function HallOfFameView() {
 
   useEffect(() => {
     fetch("/api/hall-of-fame")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          // Backend not deployed (e.g. 404 from upstream maw-js without
+          // /api/hall-of-fame). Show a friendly empty state instead of
+          // letting JSON.parse choke on the plain-text "404 Not Found"
+          // body, which would otherwise surface as
+          // "SyntaxError: Unexpected non-whitespace character after JSON
+          // at position 4" (position 4 = the 'N' of 'Not' after JSON
+          // parses '404' as a number).
+          throw new Error(`backend_unavailable: ${r.status}`);
+        }
+        return r.json();
+      })
       .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { setError(String(e)); setLoading(false); });
+      .catch((e) => {
+        const msg = String(e);
+        setError(
+          msg.includes("backend_unavailable")
+            ? "Hall of Fame backend not deployed yet (no /api/hall-of-fame endpoint)"
+            : msg,
+        );
+        setLoading(false);
+      });
   }, []);
 
   if (loading) return <div className="p-20 text-center text-white/40">Loading Hall of Fame...</div>;
