@@ -2,7 +2,7 @@
  * PeerProxyClient — browser-side client for `POST /api/proxy`.
  *
  * PROTOTYPE — iteration 7 of the federation-join-easy /loop. Drafted on the
- * `feat/wormhole-client-draft` branch (alongside `WormholeClient` and
+ * `feat/wormhole-client-draft` branch (alongside `PeerExecClient` and
  * `peerConnection`). See
  * `mawui-oracle/ψ/writing/federation-join-easy.md` for full context.
  *
@@ -10,9 +10,9 @@
  *
  * This client pairs with `maw-js/src/api/proxy.ts` (server-side, drafted on
  * `feat/api-proxy-http-peers`). It is a SEPARATE client from
- * `wormholeClient.ts` because it serves a different need:
+ * `peerExecClient.ts` because it serves a different need:
  *
- *   - **`WormholeClient`** — signed command execution (`/dig`, `/trace`,
+ *   - **`PeerExecClient`** — signed command execution (`/dig`, `/trace`,
  *     `/recap`). RPC-shaped. Returns command output strings.
  *   - **`PeerProxyClient`** — generic HTTP REST relay. Returns full HTTP
  *     responses (status, headers, body). Used when an HTTPS origin needs
@@ -46,7 +46,7 @@
  *
  * - Iteration 7 prototype, on `feat/wormhole-client-draft` (the maw-ui
  *   federation bundle branch). PR-time decision: split into separate PRs
- *   for peerConnection / WormholeClient / PeerProxyClient, or ship as one.
+ *   for peerConnection / PeerExecClient / PeerProxyClient, or ship as one.
  * - Companion server endpoint `POST /api/proxy` lives on the SEPARATE
  *   `feat/api-proxy-http-peers` branch on maw-js. Both will be filed
  *   together when Q#5 (deploy ownership) is answered.
@@ -80,7 +80,7 @@ export interface PeerProxyError {
 
 /**
  * Generate an anonymous signature for a browser visitor. Same shape as
- * `generateAnonSignature` in `wormholeClient.ts` — duplicated here to avoid
+ * `generateAnonSignature` in `peerExecClient.ts` — duplicated here to avoid
  * cross-file coupling between two prototype clients. If we ever share this,
  * it moves to `src/lib/signature.ts` with explicit dual-consumer tests.
  */

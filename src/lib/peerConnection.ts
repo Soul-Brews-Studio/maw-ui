@@ -10,12 +10,12 @@
  * ## The shape confusion this helper closes
  *
  * Iterations 1-4 framed a "runtime dispatcher" that would pick between
- * `apiUrl()` (direct fetch) and `WormholeClient` (relay) based on peer shape.
+ * `apiUrl()` (direct fetch) and `PeerExecClient` (relay) based on peer shape.
  * **That framing was wrong** — the two primitives serve DIFFERENT needs:
  *
  *   - `apiUrl()` is for **REST data fetching** — `/api/config`, `/api/feed`,
  *     `/api/sessions`, etc. Arbitrary HTTP GET/POST against a peer's API.
- *   - `WormholeClient` is for **signed command execution** — `/dig`,
+ *   - `PeerExecClient` is for **signed command execution** — `/dig`,
  *     `/trace`, `/recap`. RPC-shaped, readonly-or-allowlisted, returns a
  *     command output string.
  *
@@ -220,7 +220,7 @@ export function resolvePeerConnection(
  * `mixed-content-blocked` and `invalid`.
  *
  * Useful for gating UI elements that depend on arbitrary REST reads.
- * For command execution, use `WormholeClient` instead regardless of
+ * For command execution, use `PeerExecClient` instead regardless of
  * this helper's result.
  */
 export function canFetchDirectly(

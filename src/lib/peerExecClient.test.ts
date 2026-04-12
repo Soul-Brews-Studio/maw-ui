@@ -1,24 +1,24 @@
 /**
- * Tests for WormholeClient — browser-side client for POST /api/wormhole/request.
- * Companion to src/lib/wormholeClient.ts and maw-js/test/wormhole.test.ts.
+ * Tests for PeerExecClient — browser-side client for POST /api/peer/exec.
+ * Companion to src/lib/peerExecClient.ts and maw-js/test/wormhole.test.ts.
  *
  * PROTOTYPE — iteration 4 of the federation-join-easy /loop, drafted on the
  * feat/wormhole-client-draft branch. See
  * mawui-oracle/ψ/writing/federation-join-easy.md for context.
  *
  * maw-ui has no explicit test runner in package.json (only vite scripts), but
- * `bun test` works natively on `.test.ts` files and the WormholeClient has no
+ * `bun test` works natively on `.test.ts` files and the PeerExecClient has no
  * React/DOM/vite dependencies beyond `fetch` and `crypto.randomUUID` which are
- * both globals in modern bun. Runs via: `bun test src/lib/wormholeClient.test.ts`
+ * both globals in modern bun. Runs via: `bun test src/lib/peerExecClient.test.ts`
  * from the maw-ui repo root.
  */
 
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import {
-  WormholeClient,
+  PeerExecClient,
   generateAnonSignature,
-  type WormholeResponse,
-} from "./wormholeClient";
+  type PeerExecResponse,
+} from "./peerExecClient";
 
 // ---- Pure helper tests ---------------------------------------------------
 
@@ -51,7 +51,7 @@ describe("generateAnonSignature", () => {
   });
 });
 
-describe("WormholeClient.isReadOnlyCmd (static helper)", () => {
+describe("PeerExecClient.isReadOnlyCmd (static helper)", () => {
   test.each([
     "/dig",
     "/dig --all 5",
@@ -63,7 +63,7 @@ describe("WormholeClient.isReadOnlyCmd (static helper)", () => {
     "/philosophy",
     "/where-we-are",
   ])("permits %s", (cmd) => {
-    expect(WormholeClient.isReadOnlyCmd(cmd)).toBe(true);
+    expect(PeerExecClient.isReadOnlyCmd(cmd)).toBe(true);
   });
 
   test.each([
@@ -75,7 +75,7 @@ describe("WormholeClient.isReadOnlyCmd (static helper)", () => {
     "dig",
     "",
   ])("denies %s", (cmd) => {
-    expect(WormholeClient.isReadOnlyCmd(cmd)).toBe(false);
+    expect(PeerExecClient.isReadOnlyCmd(cmd)).toBe(false);
   });
 
   test("mirrors the server-side whitelist (same 7 verbs)", () => {
@@ -91,30 +91,30 @@ describe("WormholeClient.isReadOnlyCmd (static helper)", () => {
       "/where-we-are",
     ];
     for (const verb of SERVER_WHITELIST) {
-      expect(WormholeClient.isReadOnlyCmd(verb)).toBe(true);
+      expect(PeerExecClient.isReadOnlyCmd(verb)).toBe(true);
     }
   });
 });
 
-// ---- WormholeClient class tests ------------------------------------------
+// ---- PeerExecClient class tests ------------------------------------------
 
-describe("WormholeClient — construction", () => {
+describe("PeerExecClient — construction", () => {
   test("stores peer + generates anon signature at construction", () => {
-    const wh = new WormholeClient("white", "local.example.com");
-    expect(wh.peer).toBe("white");
-    expect(wh.signature).toMatch(/^\[local\.example\.com:anon-[a-f0-9]{8}\]$/);
+    const pe = new PeerExecClient("white", "local.example.com");
+    expect(pe.peer).toBe("white");
+    expect(pe.signature).toMatch(/^\[local\.example\.com:anon-[a-f0-9]{8}\]$/);
   });
 
   test("signature is stable for the lifetime of one instance", () => {
-    const wh = new WormholeClient("white", "local.example.com");
-    const sig1 = wh.signature;
-    const sig2 = wh.signature;
+    const pe = new PeerExecClient("white", "local.example.com");
+    const sig1 = pe.signature;
+    const sig2 = pe.signature;
     expect(sig1).toBe(sig2);
   });
 
   test("two instances produce different signatures", () => {
-    const a = new WormholeClient("white", "local.example.com");
-    const b = new WormholeClient("white", "local.example.com");
+    const a = new PeerExecClient("white", "local.example.com");
+    const b = new PeerExecClient("white", "local.example.com");
     expect(a.signature).not.toBe(b.signature);
   });
 
@@ -122,8 +122,8 @@ describe("WormholeClient — construction", () => {
     // Stub a minimal window object
     (globalThis as any).window = { location: { host: "stubbed.example.com" } };
     try {
-      const wh = new WormholeClient("white");
-      expect(wh.signature.startsWith("[stubbed.example.com:anon-")).toBe(true);
+      const pe = new PeerExecClient("white");
+      expect(pe.signature.startsWith("[stubbed.example.com:anon-")).toBe(true);
     } finally {
       delete (globalThis as any).window;
     }
@@ -132,14 +132,14 @@ describe("WormholeClient — construction", () => {
   test("falls back to 'unknown-origin' in non-browser environments", () => {
     // Ensure no window object
     delete (globalThis as any).window;
-    const wh = new WormholeClient("white");
-    expect(wh.signature.startsWith("[unknown-origin:anon-")).toBe(true);
+    const pe = new PeerExecClient("white");
+    expect(pe.signature.startsWith("[unknown-origin:anon-")).toBe(true);
   });
 });
 
 // ---- fetch mocking -------------------------------------------------------
 
-describe("WormholeClient — fetch interactions", () => {
+describe("PeerExecClient — fetch interactions", () => {
   let originalFetch: typeof fetch;
   let fetchCalls: Array<{ url: string; init?: RequestInit }>;
 
@@ -160,32 +160,32 @@ describe("WormholeClient — fetch interactions", () => {
     }) as typeof fetch;
   }
 
-  test("ensureSession() GETs /api/wormhole/session", async () => {
+  test("ensureSession() GETs /api/peer/session", async () => {
     mockFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    const wh = new WormholeClient("white", "local.example.com");
-    await wh.ensureSession();
+    const pe = new PeerExecClient("white", "local.example.com");
+    await pe.ensureSession();
     expect(fetchCalls.length).toBe(1);
-    expect(fetchCalls[0].url).toBe("/api/wormhole/session");
+    expect(fetchCalls[0].url).toBe("/api/peer/session");
   });
 
   test("ensureSession() is idempotent (multiple calls → one fetch)", async () => {
     mockFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    const wh = new WormholeClient("white", "local.example.com");
-    await wh.ensureSession();
-    await wh.ensureSession();
-    await wh.ensureSession();
+    const pe = new PeerExecClient("white", "local.example.com");
+    await pe.ensureSession();
+    await pe.ensureSession();
+    await pe.ensureSession();
     expect(fetchCalls.length).toBe(1);
   });
 
   test("ensureSession() throws on non-2xx response", async () => {
     mockFetch(() => new Response("forbidden", { status: 403 }));
-    const wh = new WormholeClient("white", "local.example.com");
-    await expect(wh.ensureSession()).rejects.toThrow(/session bootstrap failed.*403/);
+    const pe = new PeerExecClient("white", "local.example.com");
+    await expect(pe.ensureSession()).rejects.toThrow(/session bootstrap failed.*403/);
   });
 
   test("request() auto-bootstraps session if caller forgets", async () => {
     mockFetch((url) => {
-      if (url === "/api/wormhole/session") {
+      if (url === "/api/peer/session") {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(
@@ -193,17 +193,17 @@ describe("WormholeClient — fetch interactions", () => {
         { status: 200 },
       );
     });
-    const wh = new WormholeClient("white", "local.example.com");
-    const result = await wh.request("/dig", ["--all", "5"]);
-    expect(fetchCalls[0].url).toBe("/api/wormhole/session");
-    expect(fetchCalls[1].url).toBe("/api/wormhole/request");
+    const pe = new PeerExecClient("white", "local.example.com");
+    const result = await pe.request("/dig", ["--all", "5"]);
+    expect(fetchCalls[0].url).toBe("/api/peer/session");
+    expect(fetchCalls[1].url).toBe("/api/peer/exec");
     expect(result.output).toBe("ok");
     expect(result.trust_tier).toBe("readonly");
   });
 
   test("request() POSTs the correct body shape", async () => {
     mockFetch((url) => {
-      if (url === "/api/wormhole/session") {
+      if (url === "/api/peer/session") {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(
@@ -211,8 +211,8 @@ describe("WormholeClient — fetch interactions", () => {
         { status: 200 },
       );
     });
-    const wh = new WormholeClient("white", "local.example.com");
-    await wh.request("/dig", ["--all", "5"]);
+    const pe = new PeerExecClient("white", "local.example.com");
+    await pe.request("/dig", ["--all", "5"]);
     const postCall = fetchCalls[1];
     expect(postCall.init?.method).toBe("POST");
     const body = JSON.parse(postCall.init!.body as string);
@@ -224,7 +224,7 @@ describe("WormholeClient — fetch interactions", () => {
 
   test("request() defaults args to [] when not provided", async () => {
     mockFetch((url) => {
-      if (url === "/api/wormhole/session") {
+      if (url === "/api/peer/session") {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(
@@ -232,8 +232,8 @@ describe("WormholeClient — fetch interactions", () => {
         { status: 200 },
       );
     });
-    const wh = new WormholeClient("white", "local.example.com");
-    await wh.request("/dig");
+    const pe = new PeerExecClient("white", "local.example.com");
+    await pe.request("/dig");
     const body = JSON.parse(fetchCalls[1].init!.body as string);
     expect(body.args).toEqual([]);
   });
@@ -245,16 +245,16 @@ describe("WormholeClient — fetch interactions", () => {
         { status: 200 },
       ),
     );
-    const wh = new WormholeClient("white", "local.example.com");
-    await wh.ensureSession();
-    await wh.request("/dig");
+    const pe = new PeerExecClient("white", "local.example.com");
+    await pe.ensureSession();
+    await pe.request("/dig");
     expect(fetchCalls[0].init?.credentials).toBe("same-origin");
     expect(fetchCalls[1].init?.credentials).toBe("same-origin");
   });
 
   test("request() throws typed error with .status and .body on non-2xx", async () => {
     mockFetch((url) => {
-      if (url === "/api/wormhole/session") {
+      if (url === "/api/peer/session") {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(
@@ -262,21 +262,21 @@ describe("WormholeClient — fetch interactions", () => {
         { status: 403 },
       );
     });
-    const wh = new WormholeClient("white", "local.example.com");
+    const pe = new PeerExecClient("white", "local.example.com");
     try {
-      await wh.request("/awaken");
+      await pe.request("/awaken");
       expect.unreachable("should have thrown");
     } catch (err: any) {
-      expect(err.message).toContain("wormhole: 403");
+      expect(err.message).toContain("peerExec: 403");
       expect(err.message).toContain("shell_peer_denied");
       expect(err.status).toBe(403);
       expect(err.body.error).toBe("shell_peer_denied");
     }
   });
 
-  test("request() returns a typed WormholeResponse on success", async () => {
+  test("request() returns a typed PeerExecResponse on success", async () => {
     mockFetch((url) => {
-      if (url === "/api/wormhole/session") {
+      if (url === "/api/peer/session") {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(
@@ -290,8 +290,8 @@ describe("WormholeClient — fetch interactions", () => {
         { status: 200 },
       );
     });
-    const wh = new WormholeClient("white", "local.example.com");
-    const result: WormholeResponse = await wh.request("/dig");
+    const pe = new PeerExecClient("white", "local.example.com");
+    const result: PeerExecResponse = await pe.request("/dig");
     expect(result.output).toBe("dig output here");
     expect(result.from).toBe("http://10.20.0.7:3456");
     expect(result.elapsed_ms).toBe(123);
