@@ -20,6 +20,8 @@ import { ChatView } from "./components/ChatView";
 import { DashboardView } from "./components/DashboardView";
 import FederationView from "./components/FederationView";
 import DashboardPro from "./components/DashboardPro";
+import { ConnectPage } from "./components/ConnectPage";
+import { isRemote } from "./lib/api";
 // BoBFaceView, BoardView, LoopsView, JarvisView, HallOfFameView, IPadDashboard
 // removed from nav — no upstream backends. Files kept per Nothing is Deleted.
 import { LoadingSkeleton } from "./components/LoadingSkeleton";
@@ -227,6 +229,19 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
 
 export function App() {
   useAudioUnlock();
+
+  // On hosted HTTPS origins without ?host=, there's no backend to talk to.
+  // Show the connect page instead of empty views.
+  const isHostedWithoutBackend =
+    !isRemote &&
+    typeof location !== "undefined" &&
+    location.protocol === "https:" &&
+    !location.hostname.match(/^(localhost|127\.0\.0\.1)$/);
+
+  if (isHostedWithoutBackend) {
+    return <ConnectPage />;
+  }
+
   const rawRoute = useHashRoute();
   const { view: route, agentName: hashAgent } = parseHash(rawRoute);
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
