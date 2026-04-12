@@ -296,18 +296,19 @@ export function App() {
   }, [agents, sourceFilter]);
 
   // Resolve hash agent name → AgentState once agents are loaded
-  const pendingHashAgent = useRef(hashAgent);
-  useEffect(() => { pendingHashAgent.current = hashAgent; }, [hashAgent]);
-  const resolvedFromHash = useRef(false);
+  // Also re-resolve when hashAgent changes (e.g. navigating between agents via URL)
+  const lastResolvedAgent = useRef<string | null>(null);
   useEffect(() => {
-    if (resolvedFromHash.current || !pendingHashAgent.current || agents.length === 0) return;
-    const name = pendingHashAgent.current.toLowerCase();
+    if (!hashAgent || agents.length === 0) return;
+    // Skip if already resolved this exact agent name
+    if (lastResolvedAgent.current === hashAgent) return;
+    const name = hashAgent.toLowerCase();
     const match = agents.find(a => a.name.toLowerCase() === name);
     if (match) {
       setSelectedAgent(match);
-      resolvedFromHash.current = true;
+      lastResolvedAgent.current = hashAgent;
     }
-  }, [agents]);
+  }, [agents, hashAgent]);
 
   // Close terminal when hash loses the agent part (e.g. browser back)
   useEffect(() => {

@@ -152,9 +152,12 @@ export const HoverPreviewCard = memo(function HoverPreviewCard({
       try {
         const res = await fetch(apiUrl(`/api/capture?target=${encodeURIComponent(agent.target)}`));
         const data = await res.json();
-        if (active) setContent(data.content || "");
+        if (active) setContent(prev => {
+          const next = data.content || "";
+          return next === prev ? prev : next;
+        });
       } catch {}
-      if (active) setTimeout(poll, 500);
+      if (active) setTimeout(poll, 2000);
     }
     poll();
     return () => { active = false; };

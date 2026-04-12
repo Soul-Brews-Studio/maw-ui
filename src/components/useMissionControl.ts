@@ -65,17 +65,19 @@ export function useMissionControl({ sessions, agents, send, onSelectAgent, addEv
     prevMultiMode.current = multiMode;
 
     for (const a of busyAgents) {
-      if (!seenBusy.current.has(a.target)) {
-        seenBusy.current.add(a.target);
-        if (multiMode) {
-          setMultiCards(prev => new Set([...prev, a.target]));
-        } else {
-          const room = roomStyle(a.session);
-          const pos = { x: window.innerWidth / 2 + 50, y: 80 };
-          pinnedByUser.current = true;
-          setPinnedPreview({ agent: a, room: { label: room.label, accent: room.accent }, pos, svgX: 600, svgY: 500 });
-        }
+      if (multiMode) {
+        // Always ensure busy agents are in multiCards (re-adds dismissed agents)
+        setMultiCards(prev => {
+          if (prev.has(a.target)) return prev;
+          return new Set([...prev, a.target]);
+        });
+      } else if (!seenBusy.current.has(a.target)) {
+        const room = roomStyle(a.session);
+        const pos = { x: window.innerWidth / 2 + 50, y: 80 };
+        pinnedByUser.current = true;
+        setPinnedPreview({ agent: a, room: { label: room.label, accent: room.accent }, pos, svgX: 600, svgY: 500 });
       }
+      seenBusy.current.add(a.target);
     }
     // Clean up seen set when agents go idle
     for (const target of seenBusy.current) {
