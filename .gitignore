@@ -3,3 +3,4 @@ dist/
 .tmp/
 *.local
 target/
+wrangler.god.json
