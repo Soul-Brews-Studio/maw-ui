@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiUrl } from "../lib/api";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 // ---- Types (grounded against real API responses) -------------------------
 
@@ -56,19 +57,28 @@ function useDashboardData() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Live feed via WebSocket — instant updates, no polling
+  const handleWsMessage = useCallback((data: any) => {
+    if (data.type === "feed" && data.event) {
+      setFeed((prev) => [data.event as FeedEvent, ...prev].slice(0, 50));
+    } else if (data.type === "feed-history" && data.events) {
+      setFeed((prev) => {
+        const combined = [...(data.events as FeedEvent[]).reverse(), ...prev];
+        return combined.slice(0, 50);
+      });
+    }
+  }, []);
+
+  const { connected: wsConnected } = useWebSocket(handleWsMessage);
+
   const refresh = useCallback(async () => {
-    const [fedRes, plugRes, feedRes, sessRes] = await Promise.allSettled([
+    const [fedRes, plugRes, sessRes] = await Promise.allSettled([
       fetch(apiUrl("/api/federation/status")).then((r) => (r.ok ? r.json() : null)),
       fetch(apiUrl("/api/plugins")).then((r) => (r.ok ? r.json() : null)),
-      fetch(apiUrl("/api/feed?limit=20")).then((r) => (r.ok ? r.json() : null)),
       fetch(apiUrl("/api/sessions")).then((r) => (r.ok ? r.json() : null)),
     ]);
     if (fedRes.status === "fulfilled" && fedRes.value) setFed(fedRes.value);
     if (plugRes.status === "fulfilled" && plugRes.value) setPlugins(plugRes.value);
-    if (feedRes.status === "fulfilled" && feedRes.value) {
-      const events = feedRes.value.events ?? feedRes.value;
-      setFeed(Array.isArray(events) ? events : []);
-    }
     if (sessRes.status === "fulfilled" && sessRes.value) {
       const s = Array.isArray(sessRes.value) ? sessRes.value : sessRes.value.sessions ?? [];
       setSessions(s);
@@ -78,11 +88,12 @@ function useDashboardData() {
 
   useEffect(() => {
     refresh();
-    const iv = setInterval(refresh, 15_000);
+    // Poll federation/plugins/sessions every 30s (less frequent — feed is live via WS now)
+    const iv = setInterval(refresh, 30_000);
     return () => clearInterval(iv);
   }, [refresh]);
 
-  return { fed, plugins, feed, sessions, loading, refresh };
+  return { fed, plugins, feed, sessions, loading, refresh, wsConnected };
 }
 
 // ---- Panels --------------------------------------------------------------
@@ -253,15 +264,21 @@ function formatUptime(seconds: number): string {
 // ---- Main ----------------------------------------------------------------
 
 export default function DashboardPro() {
-  const { fed, plugins, feed, sessions, loading, refresh } = useDashboardData();
+  const { fed, plugins, feed, sessions, loading, refresh, wsConnected } = useDashboardData();
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-white/90">Dashboard Pro</h2>
-          <span className="text-[10px] text-white/30 px-2 py-0.5 rounded border border-white/10">
-            {loading ? "loading..." : "live"}
+          <span
+            className="text-[10px] px-2 py-0.5 rounded border"
+            style={{
+              color: wsConnected ? "#22c55e" : "#f59e0b",
+              borderColor: wsConnected ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.25)",
+            }}
+          >
+            {loading ? "loading..." : wsConnected ? "live" : "polling"}
           </span>
         </div>
         <button
