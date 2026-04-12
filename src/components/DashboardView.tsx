@@ -18,6 +18,7 @@ interface TokenSession {
   total: number;
   turns: number;
   date: string;
+  cost?: number;  // exact cost from /api/costs estimatedCost
 }
 
 interface TokenRate {
@@ -206,14 +207,38 @@ function TokenTracking() {
 
   useEffect(() => {
     const fetchTokens = () => {
-      Promise.all([
-        fetch(apiUrl("/api/tokens")).then(r => r.ok ? r.json() : []),
-        fetch(apiUrl("/api/tokens/rate?mode=window&window=3600")).then(r => r.ok ? r.json() : null),
-      ]).then(([tokData, rateData]) => {
-        setSessions(Array.isArray(tokData) ? tokData : tokData?.sessions || []);
-        setRate(rateData);
-        setLoading(false);
-      }).catch(() => setLoading(false));
+      // /api/tokens is deprecated (HTTP 410) — use /api/costs instead
+      fetch(apiUrl("/api/costs"))
+        .then(r => r.ok ? r.json() : null)
+        .then((data) => {
+          if (!data) { setLoading(false); return; }
+          // Map /api/costs agents → TokenSession[]
+          const mapped: TokenSession[] = (data.agents || []).map((a: any) => ({
+            session: a.name || "unknown",
+            project: a.name || "unknown",
+            input: a.inputTokens || 0,
+            output: a.outputTokens || 0,
+            cache: (a.cacheReadTokens || 0) + (a.cacheCreateTokens || 0),
+            total: a.totalTokens || 0,
+            turns: a.turns || 0,
+            date: a.lastActive ? new Date(a.lastActive).toISOString() : "",
+            cost: a.estimatedCost || 0,
+          }));
+          setSessions(mapped);
+          // Build rate from total
+          const total = data.total || {};
+          setRate({
+            inputTokens: total.tokens || 0,
+            outputTokens: 0,
+            totalTokens: total.tokens || 0,
+            totalPerMin: 0,
+            inputPerMin: 0,
+            outputPerMin: 0,
+            turns: 0,
+          });
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
     };
     fetchTokens();
     const iv = setInterval(fetchTokens, 30_000);
@@ -222,10 +247,10 @@ function TokenTracking() {
 
   // Aggregate by project
   const byProject = useMemo(() => {
-    const map = new Map<string, { input: number; output: number; cache: number; total: number; turns: number; sessions: number }>();
+    const map = new Map<string, { input: number; output: number; cache: number; total: number; turns: number; sessions: number; cost: number }>();
     for (const s of sessions) {
       const key = s.project || "unknown";
-      const prev = map.get(key) || { input: 0, output: 0, cache: 0, total: 0, turns: 0, sessions: 0 };
+      const prev = map.get(key) || { input: 0, output: 0, cache: 0, total: 0, turns: 0, sessions: 0, cost: 0 };
       map.set(key, {
         input: prev.input + s.input,
         output: prev.output + s.output,
@@ -233,6 +258,7 @@ function TokenTracking() {
         total: prev.total + s.total,
         turns: prev.turns + s.turns,
         sessions: prev.sessions + 1,
+        cost: prev.cost + (s.cost || 0),
       });
     }
     return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
@@ -241,6 +267,7 @@ function TokenTracking() {
   const grandTotal = useMemo(() => sessions.reduce((acc, s) => acc + s.total, 0), [sessions]);
   const grandInput = useMemo(() => sessions.reduce((acc, s) => acc + s.input, 0), [sessions]);
   const grandOutput = useMemo(() => sessions.reduce((acc, s) => acc + s.output, 0), [sessions]);
+  const grandCost = useMemo(() => sessions.reduce((acc, s) => acc + (s.cost || 0), 0), [sessions]);
 
   return (
     <div className="space-y-4">
@@ -249,7 +276,7 @@ function TokenTracking() {
       {/* Live rate + totals */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Burn Rate" value={rate ? `${formatTokens(rate.totalPerMin)}/min` : "—"} accent="#fbbf24" sub={rate ? `${rate.turns} turns/hr` : ""} />
-        <StatCard label="Total" value={formatTokens(grandTotal)} accent="#22d3ee" sub={formatCost(grandTotal)} />
+        <StatCard label="Total" value={formatTokens(grandTotal)} accent="#22d3ee" sub={grandCost > 0 ? `$${grandCost.toFixed(0)}` : formatCost(grandTotal)} />
         <StatCard label="Input" value={formatTokens(grandInput)} accent="#818cf8" sub={`${sessions.length} sessions`} />
         <StatCard label="Output" value={formatTokens(grandOutput)} accent="#f472b6" sub={rate ? `${formatTokens(rate.outputPerMin)}/min` : ""} />
       </div>
@@ -282,7 +309,7 @@ function TokenTracking() {
                     <td className="text-right py-2 px-3 text-indigo-400/70">{formatTokens(data.input)}</td>
                     <td className="text-right py-2 px-3 text-pink-400/70">{formatTokens(data.output)}</td>
                     <td className="text-right py-2 px-3 text-cyan-400/80 font-bold">{formatTokens(data.total)}</td>
-                    <td className="text-right py-2 px-3 text-amber-400/60">{formatCost(data.total)}</td>
+                    <td className="text-right py-2 px-3 text-amber-400/60">{data.cost > 0 ? `$${data.cost.toFixed(0)}` : formatCost(data.total)}</td>
                     <td className="text-right py-2 px-3 text-white/30">{data.turns}</td>
                   </tr>
                 );
