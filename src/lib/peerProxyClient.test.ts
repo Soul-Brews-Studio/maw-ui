@@ -5,7 +5,7 @@
  * feat/wormhole-client-draft. See
  * mawui-oracle/ψ/writing/federation-join-easy.md for context.
  *
- * Mirrors wormholeClient.test.ts conventions — pure helpers, construction,
+ * Mirrors peerExecClient.test.ts conventions — pure helpers, construction,
  * async fetch interactions via globalThis.fetch mock swap. Locks the
  * load-bearing invariant that GET/HEAD/OPTIONS are readonly and that the
  * client surfaces typed errors with .status + .body.

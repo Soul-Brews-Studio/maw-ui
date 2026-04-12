@@ -117,7 +117,7 @@ export function getPeerConnectionBanner(pc: PeerConnection): PeerConnectionBanne
           {
             label: "Use /wormhole for commands",
             description:
-              "POST /api/wormhole/request on your local backend relays signed commands " +
+              "POST /api/peer/exec on your local backend relays signed commands " +
               "(/dig, /trace, /recap) to any peer. NOT for arbitrary REST reads.",
           },
         ],

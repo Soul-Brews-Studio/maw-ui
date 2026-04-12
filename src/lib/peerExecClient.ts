@@ -1,5 +1,5 @@
 /**
- * WormholeClient — browser-side client for POST /api/wormhole/request.
+ * PeerExecClient — browser-side client for POST /api/peer/exec.
  *
  * PROTOTYPE — iteration 3 of the federation-join-easy proof. See
  * `mawui-oracle/ψ/writing/federation-join-easy.md` for full context. Companion
@@ -16,7 +16,7 @@
  *   2. WireGuard-only peers aren't reachable from the browser at all
  *   3. Browsers don't know `federationToken` and shouldn't
  *
- * The WormholeClient bypasses all three by relaying through the local
+ * The PeerExecClient bypasses all three by relaying through the local
  * maw-js backend. It's same-origin (no mixed content), the backend has
  * WG routes (peer reachability), and the backend signs with HMAC (no
  * secret in the browser).
@@ -33,13 +33,13 @@
  * ## Usage
  *
  * ```ts
- * import { WormholeClient } from "./wormholeClient";
+ * import { PeerExecClient } from "./peerExecClient";
  *
  * const hostParam = new URLSearchParams(location.search).get("host");
- * const wh = new WormholeClient(hostParam ?? "localhost");
- * await wh.ensureSession(); // once, on page load
+ * const pe = new PeerExecClient(hostParam ?? "localhost");
+ * await pe.ensureSession(); // once, on page load
  *
- * const result = await wh.request("/dig", ["--all", "5"]);
+ * const result = await pe.request("/dig", ["--all", "5"]);
  * console.log(result.output);
  * ```
  *
@@ -49,11 +49,11 @@
  * two coexist:
  *
  *   - `apiUrl()` = direct-fetch path, works for HTTPS peers, no backend relay
- *   - `WormholeClient` = relay path, needed for HTTP-LAN / WG-only peers
+ *   - `PeerExecClient` = relay path, needed for HTTP-LAN / WG-only peers
  *
  * The UI can pick at runtime based on the `?host=` form: if the resolved
  * peer URL is HTTPS, use `apiUrl()`; if it's HTTP or a bare peer name, use
- * `WormholeClient`. Iteration 4 will add a tiny dispatcher helper for this.
+ * `PeerExecClient`. Iteration 4 will add a tiny dispatcher helper for this.
  *
  * ## Status
  *
@@ -65,7 +65,7 @@
 
 // --- Types ---------------------------------------------------------------
 
-export interface WormholeResponse {
+export interface PeerExecResponse {
   /** The peer's raw response body */
   output: string;
   /** Which peer URL served the response */
@@ -78,7 +78,7 @@ export interface WormholeResponse {
   trust_tier: "readonly" | "shell_allowlisted";
 }
 
-export interface WormholeError {
+export interface PeerExecError {
   error: string;
   [key: string]: unknown;
 }
@@ -104,7 +104,7 @@ export function generateAnonSignature(originHost: string): string {
 
 // --- Client --------------------------------------------------------------
 
-export class WormholeClient {
+export class PeerExecClient {
   readonly peer: string;
   readonly signature: string;
   private sessionReady = false;
@@ -120,7 +120,7 @@ export class WormholeClient {
   }
 
   /**
-   * Fetch the wormhole session cookie. MUST be called once before any
+   * Fetch the peer-exec session cookie. MUST be called once before any
    * `request()` calls in production. Safe to call multiple times — the
    * backend re-issues the same cookie on each GET.
    *
@@ -128,12 +128,12 @@ export class WormholeClient {
    */
   async ensureSession(): Promise<void> {
     if (this.sessionReady) return;
-    const res = await fetch("/api/wormhole/session", {
+    const res = await fetch("/api/peer/session", {
       credentials: "same-origin",
     });
     if (!res.ok) {
       throw new Error(
-        `wormhole: session bootstrap failed (${res.status} ${res.statusText})`,
+        `peerExec: session bootstrap failed (${res.status} ${res.statusText})`,
       );
     }
     this.sessionReady = true;
@@ -145,13 +145,13 @@ export class WormholeClient {
    * /where-we-are) work for anonymous visitors; other commands will 403
    * unless the backend has this origin in config.wormhole.shellPeers.
    */
-  async request(cmd: string, args: string[] = []): Promise<WormholeResponse> {
+  async request(cmd: string, args: string[] = []): Promise<PeerExecResponse> {
     if (!this.sessionReady) {
       // Auto-bootstrap — easier for callers who forget.
       await this.ensureSession();
     }
 
-    const res = await fetch("/api/wormhole/request", {
+    const res = await fetch("/api/peer/exec", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -164,16 +164,16 @@ export class WormholeClient {
     });
 
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as WormholeError;
+      const body = (await res.json().catch(() => ({}))) as PeerExecError;
       const err = new Error(
-        `wormhole: ${res.status} ${body.error ?? res.statusText} (peer=${this.peer}, cmd=${cmd})`,
+        `peerExec: ${res.status} ${body.error ?? res.statusText} (peer=${this.peer}, cmd=${cmd})`,
       );
       (err as any).status = res.status;
       (err as any).body = body;
       throw err;
     }
 
-    return (await res.json()) as WormholeResponse;
+    return (await res.json()) as PeerExecResponse;
   }
 
   /**
