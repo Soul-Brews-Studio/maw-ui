@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { Session, AgentState, AgentEvent } from "../lib/types";
 import type { Team } from "../components/TeamPanel";
+import { apiUrl } from "../lib/api";
 import { stripAnsi } from "../lib/ansi";
 import { agentSortKey } from "../lib/constants";
 import { playWakeSound } from "../lib/sounds";
@@ -41,7 +42,7 @@ export function useSessions() {
   // doesn't deliver them (race on first connect, server restart, etc.).
   // Ported from c664f95 (Casa Oracle, PR #6).
   useEffect(() => {
-    fetch("/api/teams")
+    fetch(apiUrl("/api/teams"))
       .then(r => r.json())
       .then(data => setTeams(data.teams || []))
       .catch(() => {});

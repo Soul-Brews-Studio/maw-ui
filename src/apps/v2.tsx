@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import "../index.css";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { apiUrl } from "../lib/api";
 import { stripAnsi } from "../lib/ansi";
 import type { FeedEvent } from "../lib/feed";
 
@@ -54,8 +55,8 @@ function App() {
 
   // Fetch sessions on mount (WS sends them periodically, not immediately)
   useEffect(() => {
-    fetch("/api/sessions").then(r => r.json()).then(setSessions).catch(() => {});
-    fetch("/api/worktrees").then(r => r.json()).then(d => setTeams(d.teams || [])).catch(() => {});
+    fetch(apiUrl("/api/sessions")).then(r => r.json()).then(setSessions).catch(() => {});
+    fetch(apiUrl("/api/worktrees")).then(r => r.json()).then(d => setTeams(d.teams || [])).catch(() => {});
   }, []);
 
   // Derive agents

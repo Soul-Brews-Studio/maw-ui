@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "../index.css";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { apiUrl } from "../lib/api";
 import type { FeedEvent, FeedEventType } from "../lib/feed";
 import type { PaneStatus, Session } from "../lib/types";
 
@@ -202,7 +203,7 @@ function App() {
       ? [null, sendTarget]
       : sendTarget.split("/");
 
-    fetch("/api/action", {
+    fetch(apiUrl("/api/action"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "send", target: agent || sendTarget, text: sendText.trim() + "\r" }),
@@ -445,7 +446,7 @@ function JoinWorkspace() {
           onClick={() => {
             if (!name.trim()) return;
             setCreating(true);
-            fetch("/api/action", {
+            fetch(apiUrl("/api/action"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ type: "workspace-create", name: name.trim() }),

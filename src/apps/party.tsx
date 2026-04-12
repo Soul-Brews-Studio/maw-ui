@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "../index.css";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { apiUrl } from "../lib/api";
 import { stripAnsi } from "../lib/ansi";
 import type { FeedEvent } from "../lib/feed";
 
@@ -35,7 +36,7 @@ function useFederation() {
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => {
-    fetch("/api/federation/status")
+    fetch(apiUrl("/api/federation/status"))
       .then(r => r.json())
       .then(setStatus)
       .catch(e => setError(e.message));
@@ -326,7 +327,7 @@ function JoinCard({ onRefresh }: { onRefresh: () => void }) {
     setJoining(true);
     setResult("");
     try {
-      const res = await fetch("/api/ping", {
+      const res = await fetch(apiUrl("/api/ping"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: url.trim() }),
