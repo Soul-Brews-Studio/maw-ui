@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiUrl } from "../lib/api";
+import { apiUrl, isRemote } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
+
+// Read-only mode: hide mutation controls when viewing remotely (hosted HTTPS).
+// Local users (same-origin) get full control. Remote viewers see data only.
+const READONLY = isRemote;
 
 // ---- Types (grounded against real API responses) -------------------------
 
@@ -193,19 +197,32 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
       <div className="flex flex-wrap gap-1">
         {sessions.flatMap((s) =>
           s.windows.map((w) => (
-            <button
-              key={`${s.name}-${w.name}`}
-              className="px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer hover:ring-1 hover:ring-white/20 transition-all"
-              style={{
-                backgroundColor: w.active ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
-                color: acting === w.name ? "#f59e0b" : w.active ? "#22c55e" : "rgba(255,255,255,0.3)",
-              }}
-              title={w.active ? `Click to sleep ${w.name}` : `Click to wake ${w.name}`}
-              onClick={() => w.active ? sleepAgent(w.name) : wakeAgent(w.name)}
-              disabled={acting !== null}
-            >
-              {acting === w.name ? "..." : w.name.replace(/-oracle$/, "")}
-            </button>
+            {READONLY ? (
+              <span
+                key={`${s.name}-${w.name}`}
+                className="px-1.5 py-0.5 rounded text-[10px] font-mono"
+                style={{
+                  backgroundColor: w.active ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
+                  color: w.active ? "#22c55e" : "rgba(255,255,255,0.3)",
+                }}
+              >
+                {w.name.replace(/-oracle$/, "")}
+              </span>
+            ) : (
+              <button
+                key={`${s.name}-${w.name}`}
+                className="px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer hover:ring-1 hover:ring-white/20 transition-all"
+                style={{
+                  backgroundColor: w.active ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
+                  color: acting === w.name ? "#f59e0b" : w.active ? "#22c55e" : "rgba(255,255,255,0.3)",
+                }}
+                title={w.active ? `Click to sleep ${w.name}` : `Click to wake ${w.name}`}
+                onClick={() => w.active ? sleepAgent(w.name) : wakeAgent(w.name)}
+                disabled={acting !== null}
+              >
+                {acting === w.name ? "..." : w.name.replace(/-oracle$/, "")}
+              </button>
+            )}
           )),
         )}
       </div>
