@@ -154,39 +154,43 @@ export const HoverPreviewCard = memo(function HoverPreviewCard({
       try {
         const res = await fetch(apiUrl(`/api/capture?target=${encodeURIComponent(agent.target)}`));
         const data = await res.json();
-        if (active) setContent(data.content || "");
+        if (active) setContent(prev => {
+          const next = data.content || "";
+          return next === prev ? prev : next;
+        });
       } catch {}
-      if (active) setTimeout(poll, 500);
+      if (active) setTimeout(poll, 2000);
     }
     poll();
     return () => { active = false; };
   }, [agent.target]);
 
-  // Auto-scroll to bottom — smooth when pinned, instant on hover
-  const userScrolledRef = useRef(false);
+  // Sticky-bottom scroll — preserves user scroll position in BOTH hover +
+  // pinned modes (#27). Previous impl force-scrolled on every 500ms content
+  // poll in hover mode, and only listened for user scroll when pinned, so
+  // hover-mode preview would snap back even when the user had scrolled up.
+  const wasAtBottomRef = useRef(true);
+
+  // Listener is always attached (hover AND pinned) — 40px threshold absorbs
+  // iOS momentum + subpixel math.
   useEffect(() => {
     const el = termRef.current;
     if (!el) return;
-    // If user scrolled up in pinned mode, don't force scroll
-    if (pinned && userScrolledRef.current) return;
-    if (pinned) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    } else {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [content, pinned]);
+    const onScroll = () => {
+      wasAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
-  // Detect user scroll-up to pause auto-scroll (re-enable when near bottom)
+  // Only auto-scroll when the user was near bottom before the poll arrived.
   useEffect(() => {
     const el = termRef.current;
-    if (!el || !pinned) return;
-    const onScroll = () => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      userScrolledRef.current = !nearBottom;
-    };
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [pinned]);
+    if (!el) return;
+    if (!wasAtBottomRef.current) return;
+    if (pinned) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    else el.scrollTop = el.scrollHeight;
+  }, [content, pinned]);
 
   // Deterministic chibi features (same logic as AgentAvatar)
   let h = 0;
