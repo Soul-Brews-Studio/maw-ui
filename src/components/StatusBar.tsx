@@ -93,23 +93,29 @@ function formatTokens(n: number): string {
   return `${n}`;
 }
 
-interface RateData { inputTokens: number; outputTokens: number; totalTokens: number; totalPerMin: number; inputPerMin: number; outputPerMin: number; turns: number }
+// /api/tokens/rate was deprecated (returns zeroed stub in src/api/deprecated.ts) — rewire to /api/costs.
+// /api/costs is cumulative (scans ~/.claude/projects/**/*.jsonl), not a windowed rate, so the UI
+// now answers a different question: "fleet total tokens + estimated cost" instead of "last-hour burn rate".
+interface FleetTotal { tokens: number; cost: number; sessions: number; agents: number }
 
-function useTokenRate() {
-  const [lastHourRate, setLastHourRate] = useState<RateData | null>(null);
+function useFleetTotal() {
+  const [total, setTotal] = useState<FleetTotal | null>(null);
   useEffect(() => {
     const fetch_ = () => {
-      fetch(apiUrl("/api/tokens/rate?mode=window&window=3600")).then(r => r.json()).then(d => setLastHourRate(d)).catch(() => {});
+      fetch(apiUrl("/api/costs"))
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.total) setTotal(d.total); })
+        .catch(() => {});
     };
     fetch_();
     const iv = setInterval(fetch_, 30000);
     return () => clearInterval(iv);
   }, []);
-  return { lastHourRate };
+  return { total };
 }
 
 export const StatusBar = memo(function StatusBar({ connected, agentCount, sessionCount, tabCount = 0, activeView = "office", askCount = 0, onInbox, onJump, muted, onToggleMute, children }: StatusBarProps) {
-  const { lastHourRate } = useTokenRate();
+  const { total } = useFleetTotal();
   return (
     <header className="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 mx-4 sm:mx-6 mt-3 px-4 sm:px-6 py-2.5 rounded-2xl bg-black/50 backdrop-blur-xl border border-white/[0.06] shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
       <a href="#office" className="text-base sm:text-lg font-bold tracking-[4px] sm:tracking-[6px] text-cyan-400 uppercase whitespace-nowrap hover:text-cyan-300 transition-colors">
@@ -142,10 +148,15 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
         v{__MAW_VERSION__} · {__MAW_BUILD__}
       </span>
 
-      {lastHourRate && lastHourRate.totalTokens > 0 && (
-        <span className="text-[10px] font-mono whitespace-nowrap flex items-center gap-1" title={`Last 60min — ${formatTokens(lastHourRate.inputTokens)} in · ${formatTokens(lastHourRate.outputTokens)} out · ${lastHourRate.turns} turns`}>
-          <span className="text-amber-400/70">{formatTokens(lastHourRate.totalPerMin)}</span>
-          <span className="text-white/15">tok/min</span>
+      {total && total.tokens > 0 && (
+        <span
+          className="text-[10px] font-mono whitespace-nowrap flex items-center gap-1"
+          title={`Fleet total — ${formatTokens(total.tokens)} tokens · $${total.cost.toFixed(2)} est · ${total.sessions} sessions · ${total.agents} agents (source: /api/costs)`}
+          aria-label={`Fleet total ${formatTokens(total.tokens)} tokens, estimated cost ${total.cost.toFixed(2)} dollars`}
+        >
+          <span className="text-amber-400/70">{formatTokens(total.tokens)}</span>
+          <span className="text-white/15">tok</span>
+          {total.cost > 0 && <span className="text-emerald-400/70">· ${total.cost.toFixed(0)}</span>}
         </span>
       )}
 
