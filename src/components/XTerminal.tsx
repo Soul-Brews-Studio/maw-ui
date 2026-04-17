@@ -39,6 +39,13 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
+// Sticky-bottom scroll (#27 mobile path): preserve user scroll position when
+// new PTY output arrives. xterm.js auto-scrolls to follow the cursor on every
+// write() — without this, scrolling up to read history snaps back down on the
+// next "thinking dots" tick. Threshold of 5 lines absorbs fit.fit() jitter on
+// resize (keyboard open/close, orientation change).
+const STICKY_THRESHOLD_LINES = 5;
+
 export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibling, readOnly = false }: XTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +54,8 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
   const onNavigateRef = useRef(onNavigate);
   const siblingsRef = useRef(siblings);
   const onSelectSiblingRef = useRef(onSelectSibling);
+  // Tracks whether the user scrolled up past the threshold; set by term.onScroll.
+  const wasScrolledUpRef = useRef(false);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => { onNavigateRef.current = onNavigate; }, [onNavigate]);
   useEffect(() => { siblingsRef.current = siblings; }, [siblings]);
@@ -64,10 +73,31 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
       cursorBlink: !readOnly,
       cursorStyle: readOnly ? "underline" : "bar",
       disableStdin: readOnly,
+      scrollback: 10000,
     });
 
     const fit = new FitAddon();
     term.loadAddon(fit);
+
+    // Track whether the user has scrolled up — writeWithStickyBottom uses this
+    // to decide whether to counter-scroll after each write.
+    term.onScroll(() => {
+      const buf = term.buffer.active;
+      wasScrolledUpRef.current = (buf.baseY - buf.viewportY) > STICKY_THRESHOLD_LINES;
+    });
+
+    // Wrapper around term.write that preserves user scroll position. xterm
+    // always follows the cursor on write; this measures how many lines
+    // baseY advanced and counter-scrolls by the same delta via the write
+    // callback (runs after parse, when the new baseY is final).
+    const writeWithStickyBottom = (data: Uint8Array | string) => {
+      const preBaseY = term.buffer.active.baseY;
+      term.write(data, () => {
+        if (!wasScrolledUpRef.current) return;
+        const delta = term.buffer.active.baseY - preBaseY;
+        if (delta > 0) term.scrollLines(-delta);
+      });
+    };
 
     let ws: WebSocket | null = null;
     let dataSub: { dispose: () => void } | null = null;
@@ -105,17 +135,17 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
               try { fit.fit(); } catch {}
             }
             if (msg.type === "detached") {
-              term.write("\r\n\x1b[33m[session detached]\x1b[0m\r\n");
+              writeWithStickyBottom("\r\n\x1b[33m[session detached]\x1b[0m\r\n");
             }
           } catch {}
         } else {
           // Binary PTY data → render in xterm.js
-          term.write(new Uint8Array(e.data));
+          writeWithStickyBottom(new Uint8Array(e.data));
         }
       };
 
       ws.onclose = () => {
-        term.write("\r\n\x1b[31m[connection closed]\x1b[0m\r\n");
+        writeWithStickyBottom("\r\n\x1b[31m[connection closed]\x1b[0m\r\n");
       };
 
       if (!readOnly) {

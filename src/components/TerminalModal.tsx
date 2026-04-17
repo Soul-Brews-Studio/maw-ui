@@ -78,8 +78,14 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
           </div>
         </div>
 
-        {/* Terminal — xterm.js via PTY WebSocket */}
-        <div className="flex-1 overflow-hidden">
+        {/* Terminal — xterm.js via PTY WebSocket.
+            touchAction:pan-y + overscrollBehavior:contain let iOS forward
+            vertical touch into xterm's viewport (so user can scroll up)
+            while blocking pull-to-refresh and bubbling to body. (#27) */}
+        <div
+          className="flex-1 overflow-hidden"
+          style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
+        >
           <Suspense fallback={
             <div className="flex items-center justify-center h-full text-white/30 text-sm font-mono">
               Loading terminal...
