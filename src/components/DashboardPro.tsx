@@ -196,8 +196,8 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
     <PanelShell title="Agents" subtitle={`${total} across ${sessions.length} sessions`}>
       <div className="flex flex-wrap gap-1">
         {sessions.flatMap((s) =>
-          s.windows.map((w) => (
-            {READONLY ? (
+          s.windows.map((w) =>
+            READONLY ? (
               <span
                 key={`${s.name}-${w.name}`}
                 className="px-1.5 py-0.5 rounded text-[10px] font-mono"
@@ -222,8 +222,8 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
               >
                 {acting === w.name ? "..." : w.name.replace(/-oracle$/, "")}
               </button>
-            )}
-          )),
+            ),
+          ),
         )}
       </div>
     </PanelShell>
@@ -232,15 +232,16 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
 
 function PluginPanel({ plugins }: { plugins: PluginStatus | null }) {
   if (!plugins) return <PanelShell title="Plugins" subtitle="loading..." />;
-  const totalEvents = plugins.plugins.reduce((n, p) => n + p.events, 0);
-  const totalErrors = plugins.plugins.reduce((n, p) => n + p.errors, 0);
+  const list: Plugin[] = Array.isArray(plugins) ? plugins : (plugins.plugins ?? []);
+  const totalEvents = list.reduce((n, p) => n + (p.events ?? 0), 0);
+  const totalErrors = list.reduce((n, p) => n + (p.errors ?? 0), 0);
   return (
     <PanelShell
       title="Plugins"
-      subtitle={`${plugins.plugins.length} loaded · ${totalEvents} events${totalErrors > 0 ? ` · ${totalErrors} errors` : ""}`}
+      subtitle={`${list.length} loaded · ${totalEvents} events${totalErrors > 0 ? ` · ${totalErrors} errors` : ""}`}
     >
       <div className="space-y-1">
-        {plugins.plugins.map((p) => (
+        {list.map((p) => (
           <div key={p.name} className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <span
