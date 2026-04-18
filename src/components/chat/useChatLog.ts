@@ -2,26 +2,86 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { type MawLogEntry, formatDate, pairKey } from "./types";
 import { apiUrl, wsUrl } from "../../lib/api";
 
+// /api/feed event shape — public federation API v1 (maw-js src/api/feed.ts).
+// Chat view consumes this since /api/maw-log was rotated to 410 Gone
+// (FORGE maw-js fb9f599, 2026-04-18) with successor /api/feed.
+interface FeedEvent {
+  timestamp: string;
+  oracle: string;
+  host: string;
+  event: string;
+  project: string;
+  sessionId: string;
+  message: string;
+  ts: number;
+}
+
+// Parse "recipient: body" prefix from feed message text.
+// Returns [to, msg] on match, or [null, original] when no prefix.
+// Heuristic: take first colon if followed by space, recipient ≤ 40 chars,
+// no whitespace in recipient. Tolerant — failed parses drop the event
+// (same filter the old /api/maw-log consumer applied: require from && to).
+function parseRecipient(message: string): [string | null, string] {
+  const m = message.match(/^([a-z0-9_-]{1,40}):\s+(.+)$/is);
+  if (!m) return [null, message];
+  return [m[1].toLowerCase(), m[2]];
+}
+
+function feedEventToLogEntry(e: FeedEvent): MawLogEntry | null {
+  if (e.event !== "MessageSend") return null;
+  const [to, msg] = parseRecipient(e.message);
+  if (!to) return null;
+  return { ts: e.timestamp, from: e.oracle, to, msg };
+}
+
 export function useChatLog(mode: string) {
   const [entries, setEntries] = useState<MawLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initial fetch
+  // Initial fetch — /api/feed?limit=200 (server caps at 200 per feed.ts:21).
+  // Lens-2 discrimination: 410 Gone from a deprecated-route caller surfaces
+  // visibly via sourceError, not as silent empty entries. See
+  // ~/david-oracle/ψ/memory/vela/patterns/2026-04-18_silent-errors-deprecated-endpoints.md
   useEffect(() => {
     setLoading(true);
-    fetch(apiUrl("/api/maw-log?limit=500"))
-      .then((r) => r.json())
+    setSourceError(null);
+    fetch(apiUrl("/api/feed?limit=200"))
+      .then(async (r) => {
+        if (r.status === 410) {
+          const body = await r.json().catch(() => ({}));
+          setSourceError(`chat source deprecated (410 Gone). replacement: ${body?.replacement ?? "unknown"}`);
+          setLoading(false);
+          return null;
+        }
+        if (!r.ok) {
+          setSourceError(`chat source unreachable (HTTP ${r.status})`);
+          setLoading(false);
+          return null;
+        }
+        return r.json();
+      })
       .then((data) => {
-        setEntries((data.entries || []).filter((e: MawLogEntry) => e.from && e.to));
-        setTotal(data.total || 0);
+        if (!data) return;
+        const mapped: MawLogEntry[] = (data.events ?? [])
+          .map(feedEventToLogEntry)
+          .filter((e: MawLogEntry | null): e is MawLogEntry => e !== null);
+        setEntries(mapped);
+        setTotal(mapped.length);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        setSourceError(`chat source fetch failed: ${err?.message ?? "network error"}`);
+        setLoading(false);
+      });
   }, []);
 
-  // Real-time: listen for WebSocket push of new maw-log entries
+  // Real-time: listen for WebSocket push. Handles both "maw-log" (legacy payload
+  // type, retained for back-compat — no matches in current maw-js src but cheap
+  // to keep per Principle 1 "Nothing is Deleted") and "feed" (the new type
+  // emitted alongside FORGE's 410 rotation, if/when server pushes per-event).
   useEffect(() => {
     const url = wsUrl("/ws");
     let ws: WebSocket | null = null;
@@ -30,9 +90,17 @@ export function useChatLog(mode: string) {
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
+          let incoming: MawLogEntry[] = [];
           if (msg.type === "maw-log" && msg.entries) {
-            setEntries(prev => [...prev, ...msg.entries]);
-            setTotal(prev => prev + msg.entries.length);
+            incoming = msg.entries;
+          } else if (msg.type === "feed" && Array.isArray(msg.events)) {
+            incoming = msg.events
+              .map(feedEventToLogEntry)
+              .filter((e: MawLogEntry | null): e is MawLogEntry => e !== null);
+          }
+          if (incoming.length > 0) {
+            setEntries(prev => [...prev, ...incoming]);
+            setTotal(prev => prev + incoming.length);
             if (mode === "live") {
               requestAnimationFrame(() => {
                 scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -45,7 +113,7 @@ export function useChatLog(mode: string) {
     return () => { ws?.close(); };
   }, [mode]);
 
-  return { entries, total, loading, scrollRef };
+  return { entries, total, loading, sourceError, scrollRef };
 }
 
 export function useOracleNames(entries: MawLogEntry[]) {

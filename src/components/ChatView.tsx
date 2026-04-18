@@ -13,7 +13,7 @@ export const ChatView = memo(function ChatView() {
   const [mode, setMode] = useState<Mode>("timeline");
   const [highlighted, setHighlighted] = useState<string | null>(null);
 
-  const { entries, total, loading, scrollRef } = useChatLog(mode);
+  const { entries, total, loading, sourceError, scrollRef } = useChatLog(mode);
   const oracleNames = useOracleNames(entries);
   const filtered = useFilteredEntries(entries, filter);
   const grouped = useTimelineGroups(filtered);
@@ -84,7 +84,17 @@ export const ChatView = memo(function ChatView() {
 
       {/* Chat area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
-        {loading ? (
+        {sourceError ? (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="flex flex-col items-center justify-center h-full gap-2 px-4"
+          >
+            <p className="text-red-400/80 text-sm font-mono">chat source unavailable</p>
+            <p className="text-white/40 text-xs font-mono max-w-md text-center">{sourceError}</p>
+            <p className="text-white/25 text-[10px] font-mono">source: <code className="text-white/40">/api/feed</code> — see server logs or retry</p>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center h-full">
             <span className="text-white/20 text-sm font-mono">Loading...</span>
           </div>
