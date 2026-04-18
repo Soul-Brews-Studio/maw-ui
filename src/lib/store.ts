@@ -10,6 +10,7 @@ export interface RecentEntry {
 }
 
 import type { AskItem, BoardItem, BoardField, ScanResult, ScanMineResult, TimelineItem, PulseBoard, TaskActivity, TaskLogSummary, Project, ProjectTask } from "./types";
+import type { CrossTeamQueueItem, CrossTeamQueueResponse } from "./cross-team-queue-types";
 
 export interface DispatchStatus {
   step: "routing" | "done" | "error";
@@ -58,6 +59,15 @@ interface FleetStore {
   addAsk: (ask: Omit<AskItem, "id" | "ts">) => void;
   dismissAsk: (id: string) => void;
   dismissByOracle: (oracle: string) => void;
+
+  // Cross-team queue (Patch 6 inbox scan — FORGE /api/cross-team-queue)
+  queue: CrossTeamQueueItem[];
+  queueScannedAt: number | null;
+  queueParseErrors: Array<{ path: string; reason: string }>;
+  queueEmptyInboxes: string[];
+  queueError: string | null;
+  setQueue: (res: CrossTeamQueueResponse) => void;
+  setQueueError: (err: string | null) => void;
 
   // Board state (non-persisted)
   boardItems: BoardItem[];
@@ -268,6 +278,21 @@ export const useFleetStore = create<FleetStore>()(
         persistAsks(next);
         return { asks: next };
       }),
+
+      // Cross-team queue (non-persisted — server is source of truth, 30s refresh)
+      queue: [],
+      queueScannedAt: null,
+      queueParseErrors: [],
+      queueEmptyInboxes: [],
+      queueError: null,
+      setQueue: (res) => set({
+        queue: res.items,
+        queueScannedAt: res.scannedAt,
+        queueParseErrors: res.parseErrors ?? [],
+        queueEmptyInboxes: res.emptyInboxes,
+        queueError: null,
+      }),
+      setQueueError: (err) => set({ queueError: err }),
 
       // Board state (non-persisted)
       boardItems: [],

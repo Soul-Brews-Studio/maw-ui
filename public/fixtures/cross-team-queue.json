@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "scannedAt": 1744934400000,
+  "scannedFileCount": 66,
+  "parseErrorCount": 1,
+  "emptyInboxes": ["watchdog", "weaver", "sage", "pulse"],
+  "parseErrors": [
+    {
+      "path": "/home/leo/david-oracle/ψ/memory/arch/inbox/2026-04-15_bad-frontmatter.md",
+      "reason": "YAML parse error: unexpected end of block sequence"
+    }
+  ],
+  "byRecipient": {
+    "helm": [],
+    "forge": [],
+    "vela": [],
+    "arch": [],
+    "david": [],
+    "leo": []
+  },
+  "items": [
+    {
+      "id": "a1b2c3d4e5f6",
+      "recipient": "helm",
+      "sender": "forge",
+      "type": "blocker",
+      "priority": "high",
+      "date": "2026-04-18",
+      "path": "/home/leo/david-oracle/ψ/memory/helm/inbox/2026-04-18_forge-kaiju-code-namespace-adr.md",
+      "filename": "2026-04-18_forge-kaiju-code-namespace-adr.md",
+      "title": "FORGE → HELM: kaiju-code namespace ADR needed",
+      "preview": "HELM — blocker surfaced mid-mission. Cross-repo shared types need a stable namespace before VELA + FORGE can lock schema. Proposing ADR-003 with 3 options: kaiju-code/, mission-specific, or per-team…",
+      "actionHint": "HELM decide — kaiju-code vs mission-specific namespace",
+      "tags": ["blocker", "adr", "kaiju-code", "namespace"],
+      "related": ["/home/leo/david-oracle/ψ/memory/forge/adrs/ADR-001_branch-discipline.md"],
+      "mtime": 1744934100000,
+      "size": 2840
+    },
+    {
+      "id": "b2c3d4e5f6a7",
+      "recipient": "helm",
+      "sender": "vela",
+      "type": "status-report",
+      "priority": "medium",
+      "date": "2026-04-18",
+      "path": "/home/leo/david-oracle/ψ/memory/helm/inbox/2026-04-18_vela-morning-pr2-day1-kickoff.md",
+      "filename": "2026-04-18_vela-morning-pr2-day1-kickoff.md",
+      "title": "VELA → HELM: morning check — PR2 Day 1 kicking off",
+      "preview": "Morning. Quick status. Overnight: FORGE responded with types draft + 5 UI-side handshake questions. HELM just approved Option C, team roster, software-team filter bundled in PR2. Schema delta…",
+      "actionHint": null,
+      "tags": ["dashboard-v2", "pr2", "morning-check", "day1-kickoff"],
+      "related": [
+        "/home/leo/david-oracle/ψ/memory/vela/designs/2026-04-17_cross-team-queue-design-v1.md"
+      ],
+      "mtime": 1744933200000,
+      "size": 3120
+    },
+    {
+      "id": "c3d4e5f6a7b8",
+      "recipient": "helm",
+      "sender": "arch",
+      "type": "decision",
+      "priority": "medium",
+      "date": "2026-04-17",
+      "path": "/home/leo/david-oracle/ψ/memory/helm/inbox/2026-04-17_arch-oracle-framework-comparison.md",
+      "filename": "2026-04-17_arch-oracle-framework-comparison.md",
+      "title": "ARCH → HELM: Oracle framework comparison — ADR-010 recommendation",
+      "preview": "Completed comparison of Oracle frameworks (OpenAI Assistants, Anthropic Agents, LangGraph, custom). Recommend option A — custom framework — for reasons in ADR-010. Requesting HELM approval before…",
+      "actionHint": "approve ADR-010 option A",
+      "tags": ["adr", "oracle-framework", "comparison"],
+      "related": [],
+      "mtime": 1744876800000,
+      "size": 5240
+    },
+    {
+      "id": "d4e5f6a7b8c9",
+      "recipient": "forge",
+      "sender": "vela",
+      "type": "schema-proposal",
+      "priority": "medium",
+      "date": "2026-04-17",
+      "path": "/home/leo/david-oracle/ψ/memory/forge/inbox/2026-04-17_vela-cross-team-queue-schema-proposal.md",
+      "filename": "2026-04-17_vela-cross-team-queue-schema-proposal.md",
+      "title": "VELA → FORGE: /api/cross-team-queue schema proposal",
+      "preview": "HELM opened the PR2 parallel work lane. Backend lane is yours — VELA propose schema in design v1, please ack or revise. Design doc at vela/designs/2026-04-17_cross-team-queue-design-v1.md…",
+      "actionHint": "FORGE ack / revise schema §3 + answer §9 open questions Q4-Q6",
+      "tags": ["dashboard-v2", "pr2", "api-schema", "handshake"],
+      "related": [
+        "/home/leo/david-oracle/ψ/memory/vela/designs/2026-04-17_cross-team-queue-design-v1.md"
+      ],
+      "mtime": 1744906500000,
+      "size": 4805
+    },
+    {
+      "id": "e5f6a7b8c9d0",
+      "recipient": "vela",
+      "sender": "forge",
+      "type": "handshake",
+      "priority": "low",
+      "date": "2026-04-17",
+      "path": "/home/leo/david-oracle/ψ/memory/vela/inbox/2026-04-17_forge-cross-team-queue-types-handshake.md",
+      "filename": "2026-04-17_forge-cross-team-queue-types-handshake.md",
+      "title": "FORGE → VELA: Cross-Team Queue API — Types Draft + 5 Q's",
+      "preview": "First ping from FORGE. Ack'd HELM's handoff and VELA's Q7 (backend lane). Yes, FORGE owns /api/cross-team-queue — consistent with our charter. Types draft ready at your proposed anchor location…",
+      "actionHint": "5 type-level questions — no deadline",
+      "tags": ["cross-team-queue", "types", "api-contract"],
+      "related": [
+        "/home/leo/david-oracle/ψ/memory/forge/writing/cross-team-queue-types-draft.ts"
+      ],
+      "mtime": 1744906440000,
+      "size": 4351
+    },
+    {
+      "id": "f6a7b8c9d0e1",
+      "recipient": "vela",
+      "sender": "helm",
+      "type": "decision",
+      "priority": "high",
+      "date": "2026-04-18",
+      "path": "/home/leo/david-oracle/ψ/memory/vela/inbox/2026-04-18_helm-pr2-day1-approval.md",
+      "filename": "2026-04-18_helm-pr2-day1-approval.md",
+      "title": "HELM → VELA: PR2 Day 1 approved — start scaffolds",
+      "preview": "Option C approved. Team roster correct. Software-team filter bundled in PR2. Use FORGE types draft as schema reference. Day 1 timeline starts today — fixture JSON for UI scaffold allowed…",
+      "actionHint": null,
+      "tags": ["dashboard-v2", "pr2", "day1", "approval"],
+      "related": [],
+      "mtime": 1744934700000,
+      "size": 1420
+    },
+    {
+      "id": "1a2b3c4d5e6f",
+      "recipient": "david",
+      "sender": "kaiju-pm",
+      "type": "peer-welcome",
+      "priority": "low",
+      "date": "2026-04-16",
+      "path": "/home/leo/david-oracle/ψ/memory/david/inbox/2026-04-16_kaiju-pm-welcome.md",
+      "filename": "2026-04-16_kaiju-pm-welcome.md",
+      "title": "Kaiju-PM → David: welcome + intro",
+      "preview": "Welcome to the Kaiju leadership bench. Looking forward to working on cross-team UX priorities together. Initial sync available this week — any day works…",
+      "actionHint": null,
+      "tags": ["peer-welcome", "intro"],
+      "related": [],
+      "mtime": 1744790400000,
+      "size": 1240
+    },
+    {
+      "id": "2b3c4d5e6f7a",
+      "recipient": "leo",
+      "sender": "david",
+      "type": "decision",
+      "priority": "high",
+      "date": "2026-04-17",
+      "path": "/home/leo/david-oracle/ψ/memory/shared/cross-team/2026-W16.md",
+      "filename": "2026-W16.md",
+      "title": "David → Leo: weekly cross-team decisions (W16)",
+      "preview": "Week 16 cross-team decisions needing your call: (1) Oracle framework ADR-010 — ARCH recommendation pending your sign-off. (2) Kaiju-code namespace — FORGE blocker. (3) Team roster v2.2 promotion…",
+      "actionHint": "Leo call on 3 items listed — Thursday 2026-04-23 cutoff",
+      "tags": ["cross-team", "weekly", "leo-decisions"],
+      "related": [],
+      "mtime": 1744849200000,
+      "size": 3890
+    }
+  ]
+}

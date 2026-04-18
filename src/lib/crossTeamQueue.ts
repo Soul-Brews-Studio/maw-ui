@@ -1,0 +1,103 @@
+import { apiUrl } from "./api";
+import type { CrossTeamQueueResponse, CrossTeamQueueQuery } from "./cross-team-queue-types";
+
+// Toggle via query param ?fixture=queue or env var in dev — lets Day 1 UI work proceed
+// before FORGE /api/cross-team-queue endpoint ships. Remove the fixture branch
+// once live endpoint lands (tracked in oracle-task as "PR2 Day 3 cut fixture").
+function useFixture(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("fixture") === "queue") return true;
+  return false;
+}
+
+function serializeQuery(q: CrossTeamQueueQuery | undefined): string {
+  if (!q) return "";
+  const parts: string[] = [];
+  if (q.recipient) parts.push(`recipient=${encodeURIComponent(Array.isArray(q.recipient) ? q.recipient.join(",") : q.recipient)}`);
+  if (q.type) parts.push(`type=${encodeURIComponent(Array.isArray(q.type) ? q.type.join(",") : q.type)}`);
+  if (q.minPriority) parts.push(`minPriority=${q.minPriority}`);
+  if (q.sortBy) parts.push(`sortBy=${q.sortBy}`);
+  if (q.limitPerRecipient) parts.push(`limitPerRecipient=${q.limitPerRecipient}`);
+  return parts.length > 0 ? `?${parts.join("&")}` : "";
+}
+
+export async function fetchCrossTeamQueue(query?: CrossTeamQueueQuery): Promise<CrossTeamQueueResponse | null> {
+  const url = useFixture()
+    ? "/fixtures/cross-team-queue.json"
+    : apiUrl(`/api/cross-team-queue${serializeQuery(query)}`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as CrossTeamQueueResponse;
+    // Defensive — surface schema version mismatch loudly in dev (Principle 2)
+    if (data.schemaVersion !== 1) {
+      console.warn("[crossTeamQueue] unexpected schemaVersion", data.schemaVersion);
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export function ageHours(mtime: number, now: number = Date.now()): number {
+  return Math.max(0, (now - mtime) / (1000 * 60 * 60));
+}
+
+export function ageLabel(hours: number): string {
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m ago`;
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+// Age band drives color dot + aria-label text. Paired with visible label per Rule #2 (not color-only).
+export type AgeBand = "fresh" | "active" | "stale" | "old";
+
+export function ageBand(hours: number): AgeBand {
+  if (hours < 1) return "fresh";
+  if (hours < 12) return "active";
+  if (hours < 48) return "stale";
+  return "old";
+}
+
+export const AGE_BAND_STYLE: Record<AgeBand, { color: string; srLabel: string }> = {
+  fresh: { color: "#22c55e", srLabel: "fresh" },
+  active: { color: "#fbbf24", srLabel: "within 12 hours" },
+  stale: { color: "#f97316", srLabel: "over 12 hours old" },
+  old: { color: "#ef4444", srLabel: "over 2 days old — stale" },
+};
+
+export const PRIORITY_STYLE: Record<"high" | "medium" | "low", { color: string; label: string }> = {
+  high: { color: "#ef4444", label: "High" },
+  medium: { color: "#fbbf24", label: "Medium" },
+  low: { color: "#94a3b8", label: "Low" },
+};
+
+// localStorage-backed read-state. Device-local for v2.1; v2.2 promotion to /api/ui-state sync.
+const READ_STATE_KEY = "maw-ui.queue-read-state";
+
+export function loadReadState(): Record<string, number> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(READ_STATE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function markRead(ids: string[]): void {
+  if (typeof localStorage === "undefined" || ids.length === 0) return;
+  try {
+    const state = loadReadState();
+    const now = Date.now();
+    for (const id of ids) state[id] = now;
+    localStorage.setItem(READ_STATE_KEY, JSON.stringify(state));
+  } catch {}
+}
+
+export function isUnread(id: string, mtime: number, readState: Record<string, number>): boolean {
+  const lastReadAt = readState[id];
+  if (!lastReadAt) return true;
+  return mtime > lastReadAt;
+}
