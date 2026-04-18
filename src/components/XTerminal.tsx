@@ -72,6 +72,7 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
     let ws: WebSocket | null = null;
     let dataSub: { dispose: () => void } | null = null;
     let binSub: { dispose: () => void } | null = null;
+    let selectionSub: { dispose: () => void } | null = null;
     let resizeTimer: ReturnType<typeof setTimeout>;
     let resizeObserver: ResizeObserver | null = null;
 
@@ -82,6 +83,15 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
         fit.fit();
         term.focus();
       } catch { return; }
+
+      // Drag-select → browser clipboard. Last selection wins; clipboard API
+      // may reject in insecure contexts — silently ignore.
+      selectionSub = term.onSelectionChange(() => {
+        const sel = term.getSelection();
+        if (sel && sel.length > 0) {
+          navigator.clipboard.writeText(sel).catch(() => {});
+        }
+      });
 
       // Connect to PTY WebSocket
       ws = new WebSocket(wsUrl("/ws/pty"));
@@ -171,6 +181,7 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
       resizeObserver?.disconnect();
       dataSub?.dispose();
       binSub?.dispose();
+      selectionSub?.dispose();
       ws?.close();
       term.dispose();
     };
