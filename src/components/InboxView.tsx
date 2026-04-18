@@ -2,11 +2,12 @@ import { memo, useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useFleetStore } from "../lib/store";
 import { agentColor } from "../lib/constants";
 import type { AskItem } from "../lib/types";
-import type { CrossTeamQueueItem, Team } from "../lib/cross-team-queue-types";
-import { teamOf, TEAM_LABELS, TEAM_TAB_ORDER } from "../lib/teams";
+import type { CrossTeamQueueItem } from "../lib/cross-team-queue-types";
+import { TEAM_LABELS, TEAM_TAB_ORDER, type Team } from "../lib/teams";
 import {
   fetchCrossTeamQueue,
-  ageHours,
+  hoursSinceISO,
+  itemAgeHours,
   ageLabel,
   ageBand,
   AGE_BAND_STYLE,
@@ -140,11 +141,11 @@ function QueueItemRow({
   unread: boolean;
   onOpen: (item: CrossTeamQueueItem) => void;
 }) {
-  const hours = ageHours(item.mtime);
+  const hours = itemAgeHours(item);
   const band = ageBand(hours);
   const ageStyle = AGE_BAND_STYLE[band];
   const priStyle = PRIORITY_STYLE[item.priority];
-  const senderColor = agentColor(item.sender);
+  const senderColor = agentColor(item.from);
 
   return (
     <article
@@ -153,7 +154,7 @@ function QueueItemRow({
         background: unread ? "rgba(34,211,238,0.04)" : "rgba(255,255,255,0.02)",
         borderColor: unread ? "rgba(34,211,238,0.18)" : "rgba(255,255,255,0.06)",
       }}
-      aria-label={`${item.sender} to ${item.recipient}, ${item.type}, ${ageStyle.srLabel}, priority ${priStyle.label}`}
+      aria-label={`${item.from} to ${item.to}, ${item.type}, ${ageStyle.srLabel}, priority ${priStyle.label}`}
     >
       <div className="flex items-center gap-2 mb-1.5">
         <span
@@ -164,10 +165,10 @@ function QueueItemRow({
           title={ageStyle.srLabel}
         />
         <span className="text-[11px] font-semibold truncate" style={{ color: senderColor }}>
-          {item.sender}
+          {item.from}
         </span>
         <span className="text-[10px] text-white/30">→</span>
-        <span className="text-[11px] font-semibold truncate text-white/70">{item.recipient}</span>
+        <span className="text-[11px] font-semibold truncate text-white/70">{item.to}</span>
         <span
           className="text-[9px] font-mono px-1.5 py-0.5 rounded"
           style={{ background: `${priStyle.color}18`, color: priStyle.color }}
@@ -261,12 +262,12 @@ function CrossTeamSection() {
 
   const filtered = useMemo(() => {
     if (tab === "all") return queue;
-    return queue.filter((item) => teamOf(item.recipient) === tab);
+    return queue.filter((item) => item.team === tab);
   }, [queue, tab]);
 
   const counts: Record<TeamTab, number> = useMemo(() => {
     const c: Record<TeamTab, number> = { all: queue.length, software: 0, business: 0, cross: 0, unknown: 0 };
-    for (const item of queue) c[teamOf(item.recipient)] += 1;
+    for (const item of queue) c[item.team] += 1;
     return c;
   }, [queue]);
 
@@ -282,7 +283,7 @@ function CrossTeamSection() {
     }
   }, []);
 
-  const scannedAgo = scannedAt ? ageLabel(ageHours(scannedAt)) : "—";
+  const scannedAgo = scannedAt ? ageLabel(hoursSinceISO(scannedAt)) : "—";
 
   return (
     <section aria-labelledby="cross-team-heading" className="mt-5">

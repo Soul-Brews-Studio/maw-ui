@@ -1,13 +1,13 @@
-import type { Team } from "./cross-team-queue-types";
+import { TEAM_ROSTER, type TeamName } from "./cross-team-queue-types";
 
-// Hardcoded team roster for v2.1 — approved by HELM 2026-04-18.
-// v2.2 promotion target: ~/david-oracle/ψ/memory/shared/team-roster-v1.yaml
-// Must mirror FORGE's backend constant in maw-js; divergence = retro item.
-export const TEAM_ROSTER: Record<Exclude<Team, "unknown">, readonly string[]> = {
-  software: ["helm", "forge", "vela", "arch", "nexus", "pace", "watchdog", "weaver", "sage"],
-  business: ["david", "david-cos", "pulse"],
-  cross: ["leo"],
-} as const;
+// Re-export the canonical TEAM_ROSTER from FORGE's shared contract.
+// UI consumers in this repo import from "./teams" rather than reach into the
+// schema types file, so helpers (labels, tab order, normalization) co-locate.
+export { TEAM_ROSTER };
+export type { TeamName };
+
+// UI-facing union: backend `team` field is `TeamName | "unknown"`.
+export type Team = TeamName | "unknown";
 
 export const TEAM_LABELS: Record<Team, string> = {
   software: "Software",
@@ -28,10 +28,13 @@ export function normalizeOracleName(raw: string): string {
   return raw.trim().toLowerCase().replace(/-oracle$/, "");
 }
 
+// Backend pre-computes `item.team`; this helper exists for inputs without
+// a precomputed team (e.g. fleet agent list) and to mirror FORGE's constant
+// exactly. Divergence is a retro item per ADR-002.
 export function teamOf(oracle: string): Team {
   const name = normalizeOracleName(oracle);
   for (const [team, roster] of Object.entries(TEAM_ROSTER)) {
-    if (roster.includes(name)) return team as Team;
+    if ((roster as readonly string[]).includes(name)) return team as Team;
   }
   return "unknown";
 }

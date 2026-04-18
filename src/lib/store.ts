@@ -10,7 +10,7 @@ export interface RecentEntry {
 }
 
 import type { AskItem, BoardItem, BoardField, ScanResult, ScanMineResult, TimelineItem, PulseBoard, TaskActivity, TaskLogSummary, Project, ProjectTask } from "./types";
-import type { CrossTeamQueueItem, CrossTeamQueueResponse } from "./cross-team-queue-types";
+import type { CrossTeamQueueItem, CrossTeamQueueResponse, CrossTeamQueueParseError } from "./cross-team-queue-types";
 
 export interface DispatchStatus {
   step: "routing" | "done" | "error";
@@ -62,8 +62,8 @@ interface FleetStore {
 
   // Cross-team queue (Patch 6 inbox scan — FORGE /api/cross-team-queue)
   queue: CrossTeamQueueItem[];
-  queueScannedAt: number | null;
-  queueParseErrors: Array<{ path: string; reason: string }>;
+  queueScannedAt: string | null;
+  queueParseErrors: CrossTeamQueueParseError[];
   queueEmptyInboxes: string[];
   queueError: string | null;
   setQueue: (res: CrossTeamQueueResponse) => void;
@@ -288,7 +288,7 @@ export const useFleetStore = create<FleetStore>()(
       setQueue: (res) => set({
         queue: res.items,
         queueScannedAt: res.scannedAt,
-        queueParseErrors: res.parseErrors ?? [],
+        queueParseErrors: res.errors,
         queueEmptyInboxes: res.emptyInboxes,
         queueError: null,
       }),

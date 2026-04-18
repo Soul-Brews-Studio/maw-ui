@@ -1,5 +1,5 @@
 import { apiUrl } from "./api";
-import type { CrossTeamQueueResponse, CrossTeamQueueQuery } from "./cross-team-queue-types";
+import type { CrossTeamQueueResponse, CrossTeamQueueQuery, CrossTeamQueueItem } from "./cross-team-queue-types";
 
 // Toggle via query param ?fixture=queue or env var in dev — lets Day 1 UI work proceed
 // before FORGE /api/cross-team-queue endpoint ships. Remove the fixture branch
@@ -40,8 +40,21 @@ export async function fetchCrossTeamQueue(query?: CrossTeamQueueQuery): Promise<
   }
 }
 
-export function ageHours(mtime: number, now: number = Date.now()): number {
+// Backend pre-computes `item.ageHours`; prefer that for items. This helper
+// is for computing age from `scannedAt` (ISO-8601 string) or raw mtime.
+export function hoursSinceISO(iso: string, now: number = Date.now()): number {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 0;
+  return Math.max(0, (now - then) / (1000 * 60 * 60));
+}
+
+export function hoursSinceMtime(mtime: number, now: number = Date.now()): number {
   return Math.max(0, (now - mtime) / (1000 * 60 * 60));
+}
+
+export function itemAgeHours(item: Pick<CrossTeamQueueItem, "ageHours" | "mtime">): number {
+  if (typeof item.ageHours === "number" && item.ageHours > 0) return item.ageHours;
+  return hoursSinceMtime(item.mtime);
 }
 
 export function ageLabel(hours: number): string {
@@ -101,3 +114,6 @@ export function isUnread(id: string, mtime: number, readState: Record<string, nu
   if (!lastReadAt) return true;
   return mtime > lastReadAt;
 }
+
+// Re-export the item type so importers can pull everything from this module.
+export type { CrossTeamQueueItem, CrossTeamQueueResponse, CrossTeamQueueQuery };
