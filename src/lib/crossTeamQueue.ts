@@ -1,33 +1,28 @@
 import { apiUrl } from "./api";
 import type { CrossTeamQueueResponse, CrossTeamQueueQuery, CrossTeamQueueItem } from "./cross-team-queue-types";
 
-// Toggle via query param ?fixture=queue or env var in dev — lets Day 1 UI work proceed
-// before FORGE /api/cross-team-queue endpoint ships. Remove the fixture branch
-// once live endpoint lands (tracked in oracle-task as "PR2 Day 3 cut fixture").
-function useFixture(): boolean {
-  if (typeof window === "undefined") return false;
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("fixture") === "queue") return true;
-  return false;
-}
+// Day 3 URL swap complete (2026-04-18) — fetcher consumes the live
+// /api/cross-team-queue endpoint only. The Day 1 `?fixture=queue`
+// branch and public/fixtures/cross-team-queue.json were removed once
+// FORGE's Day 2 scan (maw-js 53cb396) landed; the fixture itself is
+// preserved upstream at ~/david-oracle/ψ/memory/forge/writing/
+// cross-team-queue-fixture-v1.json (Principle 1).
 
 function serializeQuery(q: CrossTeamQueueQuery | undefined): string {
   if (!q) return "";
   const parts: string[] = [];
   if (q.recipient) parts.push(`recipient=${encodeURIComponent(Array.isArray(q.recipient) ? q.recipient.join(",") : q.recipient)}`);
   if (q.type) parts.push(`type=${encodeURIComponent(Array.isArray(q.type) ? q.type.join(",") : q.type)}`);
-  if (q.minPriority) parts.push(`minPriority=${q.minPriority}`);
-  if (q.sortBy) parts.push(`sortBy=${q.sortBy}`);
-  if (q.limitPerRecipient) parts.push(`limitPerRecipient=${q.limitPerRecipient}`);
+  if (q.team) parts.push(`team=${encodeURIComponent(q.team)}`);
+  if (q.actionRequired) parts.push(`actionRequired=${q.actionRequired}`);
+  if (q.maxAgeHours !== undefined) parts.push(`maxAgeHours=${q.maxAgeHours}`);
+  if (q.limit !== undefined) parts.push(`limit=${q.limit}`);
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }
 
 export async function fetchCrossTeamQueue(query?: CrossTeamQueueQuery): Promise<CrossTeamQueueResponse | null> {
-  const url = useFixture()
-    ? "/fixtures/cross-team-queue.json"
-    : apiUrl(`/api/cross-team-queue${serializeQuery(query)}`);
   try {
-    const res = await fetch(url);
+    const res = await fetch(apiUrl(`/api/cross-team-queue${serializeQuery(query)}`));
     if (!res.ok) return null;
     const data = (await res.json()) as CrossTeamQueueResponse;
     // Defensive — surface schema version mismatch loudly in dev (Principle 2)
