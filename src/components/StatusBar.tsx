@@ -98,8 +98,14 @@ interface RateData { inputTokens: number; outputTokens: number; totalTokens: num
 function useTokenRate() {
   const [lastHourRate, setLastHourRate] = useState<RateData | null>(null);
   useEffect(() => {
-    const fetch_ = () => {
-      fetch(apiUrl("/api/tokens/rate?mode=window&window=3600")).then(r => r.json()).then(d => setLastHourRate(d)).catch(() => {});
+    const fetch_ = async () => {
+      try {
+        const r = await fetch(apiUrl("/api/tokens/rate?mode=window&window=3600"));
+        // maw-js retired this endpoint — returns 410 with Link: /api/costs.
+        // Silently skip until UI migrates to the /api/costs shape (different schema).
+        if (!r.ok) return;
+        setLastHourRate(await r.json());
+      } catch { /* network blip — silent */ }
     };
     fetch_();
     const iv = setInterval(fetch_, 30000);
