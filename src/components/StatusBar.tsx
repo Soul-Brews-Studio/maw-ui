@@ -96,22 +96,13 @@ function formatTokens(n: number): string {
 interface RateData { inputTokens: number; outputTokens: number; totalTokens: number; totalPerMin: number; inputPerMin: number; outputPerMin: number; turns: number }
 
 function useTokenRate() {
-  const [lastHourRate, setLastHourRate] = useState<RateData | null>(null);
-  useEffect(() => {
-    const fetch_ = async () => {
-      try {
-        const r = await fetch(apiUrl("/api/tokens/rate?mode=window&window=3600"));
-        // maw-js retired this endpoint — returns 410 with Link: /api/costs.
-        // Silently skip until UI migrates to the /api/costs shape (different schema).
-        if (!r.ok) return;
-        setLastHourRate(await r.json());
-      } catch { /* network blip — silent */ }
-    };
-    fetch_();
-    const iv = setInterval(fetch_, 30000);
-    return () => clearInterval(iv);
-  }, []);
-  return { lastHourRate };
+  // /api/tokens/rate was retired by maw-js (410 Gone + Link: /api/costs).
+  // Browsers log 4xx responses to console regardless of client handling, so
+  // the only way to stop the console spam is to not make the request.
+  // Until the StatusBar is adapted to /api/costs' shape (per-session/model
+  // breakdown instead of simple per-min rate), the tok/min indicator is
+  // disabled. See mauw-ui issue for migration.
+  return { lastHourRate: null as RateData | null };
 }
 
 export const StatusBar = memo(function StatusBar({ connected, agentCount, sessionCount, tabCount = 0, activeView = "office", askCount = 0, onInbox, onJump, muted, onToggleMute, children }: StatusBarProps) {
