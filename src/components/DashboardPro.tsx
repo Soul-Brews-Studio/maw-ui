@@ -232,27 +232,33 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
 
 function PluginPanel({ plugins }: { plugins: PluginStatus | null }) {
   if (!plugins) return <PanelShell title="Plugins" subtitle="loading..." />;
-  const totalEvents = plugins.plugins.reduce((n, p) => n + p.events, 0);
-  const totalErrors = plugins.plugins.reduce((n, p) => n + p.errors, 0);
+  // /api/plugins shape changed server-side — can be bare array OR wrapped object.
+  // Normalize both shapes + tolerate missing events/errors (new endpoint omits them).
+  const list: Array<{ name: string; events?: number; errors?: number; source?: string }> =
+    Array.isArray(plugins) ? plugins : (plugins.plugins ?? []);
+  const totalEvents = list.reduce((n, p) => n + (p.events ?? 0), 0);
+  const totalErrors = list.reduce((n, p) => n + (p.errors ?? 0), 0);
   return (
     <PanelShell
       title="Plugins"
-      subtitle={`${plugins.plugins.length} loaded · ${totalEvents} events${totalErrors > 0 ? ` · ${totalErrors} errors` : ""}`}
+      subtitle={`${list.length} loaded${totalEvents > 0 ? ` · ${totalEvents} events` : ""}${totalErrors > 0 ? ` · ${totalErrors} errors` : ""}`}
     >
       <div className="space-y-1">
-        {plugins.plugins.map((p) => (
+        {list.map((p) => (
           <div key={p.name} className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <span
                 className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: p.errors > 0 ? "#ef4444" : "#22c55e" }}
+                style={{ backgroundColor: (p.errors ?? 0) > 0 ? "#ef4444" : "#22c55e" }}
               />
               <span className="text-white/60">{p.name.replace(/\.ts$/, "")}</span>
-              <span className="text-white/20 text-[10px]">{p.source}</span>
+              {p.source && <span className="text-white/20 text-[10px]">{p.source}</span>}
             </div>
-            <span className="text-white/40 font-mono text-[10px]">
-              {p.events}ev{p.errors > 0 && <span className="text-red-400 ml-1">{p.errors}err</span>}
-            </span>
+            {(p.events ?? 0) > 0 && (
+              <span className="text-white/40 font-mono text-[10px]">
+                {p.events}ev{(p.errors ?? 0) > 0 && <span className="text-red-400 ml-1">{p.errors}err</span>}
+              </span>
+            )}
           </div>
         ))}
       </div>
