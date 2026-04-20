@@ -10,6 +10,7 @@ export default defineConfig({
   define: {
     __MAW_VERSION__: JSON.stringify(pkg.version),
     __MAW_BUILD__: JSON.stringify(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" })),
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   root: ".",
   base: "/maw/",
