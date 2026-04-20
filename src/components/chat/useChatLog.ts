@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { type MawLogEntry, formatDate, pairKey } from "./types";
 import { apiUrl } from "../../lib/api";
+import { cached } from "../../lib/cache";
 import { useWebSocket } from "../../hooks/useWebSocket";
 
 export function useChatLog(mode: string) {
@@ -14,9 +15,13 @@ export function useChatLog(mode: string) {
   // Initial fetch
   useEffect(() => {
     setLoading(true);
-    fetch(apiUrl("/api/chats?limit=500"))
-      .then((r) => r.json())
-      .then((data) => {
+    cached(
+      "chats-500",
+      60_000,
+      () => fetch(apiUrl("/api/chats?limit=500")).then((r) => r.json()),
+      { tag: "chats" },
+    )
+      .then((data: any) => {
         const mapped: MawLogEntry[] = (data.entries || [])
           .filter((e: any) => e.from && e.to)
           .map((e: any) => ({ ts: e.ts, from: e.from, to: e.to, msg: e.msg, ch: e.threadId }));
