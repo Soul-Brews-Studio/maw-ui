@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiUrl } from "../lib/api";
+import { PageShell } from "./PageShell";
 
 interface WorktreeInfo {
   path: string;
@@ -82,7 +83,7 @@ export function WorktreeView() {
   const activeCount = worktrees.filter((wt) => wt.status === "active").length;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <PageShell>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -191,6 +192,6 @@ export function WorktreeView() {
           })}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
