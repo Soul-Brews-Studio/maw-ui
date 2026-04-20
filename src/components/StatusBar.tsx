@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef, type ReactNode } from "react";
 import { apiUrl, isRemote } from "../lib/api";
+import { cached } from "../lib/cache";
 import { SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound, type SoundProfile } from "../lib/sounds";
 
 function SoundButton({ muted, onToggleMute }: { muted: boolean; onToggleMute: () => void }) {
@@ -99,7 +100,12 @@ function useTokenRate() {
   const [lastHourRate, setLastHourRate] = useState<RateData | null>(null);
   useEffect(() => {
     const fetch_ = () => {
-      fetch(apiUrl("/api/tokens/rate?mode=window&window=3600")).then(r => r.json()).then(d => setLastHourRate(d)).catch(() => {});
+      cached(
+        "tokens-rate-1h",
+        30_000,
+        () => fetch(apiUrl("/api/tokens/rate?mode=window&window=3600")).then(r => r.json() as Promise<RateData>),
+        { tag: "tokens-rate" },
+      ).then(setLastHourRate).catch(() => {});
     };
     fetch_();
     const iv = setInterval(fetch_, 30000);
