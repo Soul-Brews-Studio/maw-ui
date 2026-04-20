@@ -99,17 +99,35 @@ interface RateData { inputTokens: number; outputTokens: number; totalTokens: num
 function useTokenRate() {
   const [lastHourRate, setLastHourRate] = useState<RateData | null>(null);
   useEffect(() => {
-    const fetch_ = () => {
-      cached(
-        "tokens-rate-1h",
-        30_000,
-        () => fetch(apiUrl("/api/tokens/rate?mode=window&window=3600")).then(r => r.json() as Promise<RateData>),
-        { tag: "tokens-rate" },
-      ).then(setLastHourRate).catch(() => {});
+    let stopped = false;
+    let warned = false;
+    const fetch_ = async () => {
+      if (stopped) return;
+      try {
+        const data = await cached(
+          "tokens-rate-1h",
+          30_000,
+          async () => {
+            const r = await fetch(apiUrl("/api/tokens/rate?mode=window&window=3600"));
+            // TODO: migrate to /api/costs once FORGE/Neo fix the handler (currently returns
+            // `{"error":"cannot reach maw server"}` despite handler in src/api/costs.ts:185).
+            // Until then: stop polling on 410 Gone to keep console clean.
+            if (r.status === 410) {
+              if (!warned) { console.warn("[tokens-rate] endpoint 410 Gone — polling stopped until /api/costs is live"); warned = true; }
+              stopped = true;
+              return null;
+            }
+            if (!r.ok) return null;
+            return r.json() as Promise<RateData>;
+          },
+          { tag: "tokens-rate" },
+        );
+        if (data) setLastHourRate(data);
+      } catch { /* silent */ }
     };
     fetch_();
     const iv = setInterval(fetch_, 30000);
-    return () => clearInterval(iv);
+    return () => { stopped = true; clearInterval(iv); };
   }, []);
   return { lastHourRate };
 }
