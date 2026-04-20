@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "../lib/apiFetch";
 import { cached } from "../lib/cache";
+import { PageShell } from "./PageShell";
 
 interface OracleConsciousness {
   name: string;
@@ -78,7 +79,7 @@ export function ConsciousnessView() {
   const detail = selected ? oracles.find(o => o.name === selected) : null;
 
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+    <PageShell maxWidth="1200px">
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h2 className="font-mono text-lg" style={{ color: "#a855f7" }}>
@@ -194,7 +195,7 @@ export function ConsciousnessView() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 
