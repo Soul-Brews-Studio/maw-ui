@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiUrl } from "../lib/api";
+import { cached, cacheBus } from "../lib/cache";
 import { PageShell } from "./PageShell";
+
+const WORKTREE_CACHE_KEY = "maw-ui:worktrees:v1";
+const WORKTREE_CACHE_TAG = "worktrees";
+const WORKTREE_TTL_MS = 15_000;
 
 interface WorktreeInfo {
   path: string;
@@ -30,11 +35,18 @@ export function WorktreeView() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(apiUrl("/api/worktrees"));
-      const data = await res.json();
+      const data = await cached(
+        WORKTREE_CACHE_KEY,
+        WORKTREE_TTL_MS,
+        async () => {
+          const res = await fetch(apiUrl("/api/worktrees"));
+          return res.json();
+        },
+        { tag: WORKTREE_CACHE_TAG },
+      );
       if (Array.isArray(data)) {
         setWorktrees(data);
-      } else if (data.error) {
+      } else if (data?.error) {
         setError(data.error);
       }
     } catch (e: any) {
@@ -56,7 +68,7 @@ export function WorktreeView() {
       const data = await res.json();
       if (data.ok) {
         setLogs((prev) => ({ ...prev, [wt.path]: data.log }));
-        // Refresh after cleanup
+        cacheBus.invalidate(WORKTREE_CACHE_TAG);
         setTimeout(fetchWorktrees, 500);
       } else {
         setLogs((prev) => ({ ...prev, [wt.path]: [`Error: ${data.error}`] }));
