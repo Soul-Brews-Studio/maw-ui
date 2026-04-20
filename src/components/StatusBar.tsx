@@ -1,6 +1,5 @@
 import { memo, useState, useEffect, useRef, type ReactNode } from "react";
 import { apiUrl, isRemote } from "../lib/api";
-import { cached } from "../lib/cache";
 import { SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound, type SoundProfile } from "../lib/sounds";
 
 function SoundButton({ muted, onToggleMute }: { muted: boolean; onToggleMute: () => void }) {
@@ -87,51 +86,11 @@ const NAV_ITEMS = [
 
 const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return `${n}`;
-}
-
-interface RateData { inputTokens: number; outputTokens: number; totalTokens: number; totalPerMin: number; inputPerMin: number; outputPerMin: number; turns: number }
-
-// Module-level kill switch — survives remounts, gates all network attempts.
-// TODO: remove + migrate to /api/costs once FORGE/Neo fix the handler
-// (currently returns `{"error":"cannot reach maw server"}` despite handler
-// in src/api/costs.ts:185). See outbox 2026-04-20_0902_to-neo_api-costs-broken.md.
-let tokenRateGone = false;
-
-function useTokenRate() {
-  const [lastHourRate, setLastHourRate] = useState<RateData | null>(null);
-  useEffect(() => {
-    if (tokenRateGone) return;
-    let cancelled = false;
-    const fetch_ = async () => {
-      if (tokenRateGone || cancelled) return;
-      try {
-        // Intentionally NOT wrapped in cached() — SWR bg refresh would keep
-        // retrying the dead endpoint. Direct fetch gives us clean one-shot control.
-        const r = await fetch(apiUrl("/api/tokens/rate?mode=window&window=3600"));
-        if (r.status === 410) {
-          tokenRateGone = true;
-          console.warn("[tokens-rate] endpoint 410 Gone — polling stopped until /api/costs is live");
-          return;
-        }
-        if (!r.ok) return;
-        const data = (await r.json()) as RateData;
-        if (!cancelled) setLastHourRate(data);
-      } catch { /* silent */ }
-    };
-    fetch_();
-    const iv = setInterval(fetch_, 30000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, []);
-  return { lastHourRate };
-}
+// Rate widget removed 2026-04-20 — /api/tokens/rate returns 410 Gone (FORGE deprecation),
+// replacement /api/costs currently returns error. Restore when backend is fixed:
+// see ψ/outbox/2026-04-20_0902_to-neo_api-costs-broken.md for context.
 
 export const StatusBar = memo(function StatusBar({ connected, agentCount, sessionCount, tabCount = 0, activeView = "office", askCount = 0, onInbox, onJump, muted, onToggleMute, children }: StatusBarProps) {
-  const { lastHourRate } = useTokenRate();
   return (
     <header className="sticky top-0 z-20 flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1.5 sm:gap-y-2 mx-2 sm:mx-4 md:mx-6 mt-2 sm:mt-3 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-xl border border-white/[0.06] shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
       <a href="#office" className="text-sm sm:text-base md:text-lg font-bold tracking-[3px] sm:tracking-[4px] md:tracking-[6px] text-cyan-400 uppercase whitespace-nowrap hover:text-cyan-300 transition-colors">
@@ -163,13 +122,6 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
       <span className="text-[10px] text-white/20 font-mono whitespace-nowrap hidden md:inline">
         v{__MAW_VERSION__} · {__MAW_BUILD__}
       </span>
-
-      {lastHourRate && lastHourRate.totalTokens > 0 && (
-        <span className="text-[10px] font-mono whitespace-nowrap items-center gap-1 hidden sm:flex" title={`Last 60min — ${formatTokens(lastHourRate.inputTokens)} in · ${formatTokens(lastHourRate.outputTokens)} out · ${lastHourRate.turns} turns`}>
-          <span className="text-amber-400/70">{formatTokens(lastHourRate.totalPerMin)}</span>
-          <span className="text-white/15">tok/min</span>
-        </span>
-      )}
 
       {/* View-specific controls injected by parent */}
       {children}
