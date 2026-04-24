@@ -6,7 +6,7 @@ import { describeActivity, type FeedEvent } from "../lib/feed";
 import { useFleetStore } from "../lib/store";
 import { useAgentPreview } from "../lib/previewStore";
 import { useFeedStatusStore, useLiveStatus, useAllStatuses } from "../lib/feedStatusStore";
-import type { AgentState, Session, AgentEvent } from "../lib/types";
+import type { AgentState, Session, AgentEvent, PaneStatus } from "../lib/types";
 
 // ─── Token types ────────────────────────────────────────────────────
 interface TokenSession {
@@ -55,10 +55,11 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400_000)}d ago`;
 }
 
-const STATUS_CONFIG = {
-  busy: { color: "#fbbf24", bg: "rgba(251,191,36,0.12)", glow: "0 0 8px rgba(251,191,36,0.4)", label: "BUSY", dot: "bg-amber-400 animate-pulse shadow-[0_0_6px_#ffa726]" },
-  ready: { color: "#22c55e", bg: "rgba(34,197,94,0.10)", glow: "0 0 6px rgba(34,197,94,0.3)", label: "READY", dot: "bg-emerald-400 shadow-[0_0_4px_#4caf50]" },
-  idle: { color: "#64748b", bg: "rgba(100,116,139,0.06)", glow: "none", label: "IDLE", dot: "bg-white/20" },
+const STATUS_CONFIG: Record<PaneStatus, { color: string; bg: string; glow: string; label: string; dot: string }> = {
+  busy:    { color: "#fbbf24", bg: "rgba(251,191,36,0.12)", glow: "0 0 8px rgba(251,191,36,0.4)", label: "BUSY",    dot: "bg-amber-400 animate-pulse shadow-[0_0_6px_#ffa726]" },
+  ready:   { color: "#22c55e", bg: "rgba(34,197,94,0.10)",  glow: "0 0 6px rgba(34,197,94,0.3)",  label: "READY",   dot: "bg-emerald-400 shadow-[0_0_4px_#4caf50]" },
+  idle:    { color: "#64748b", bg: "rgba(100,116,139,0.06)", glow: "none",                         label: "IDLE",    dot: "bg-white/20" },
+  crashed: { color: "#ef4444", bg: "rgba(239,68,68,0.14)",  glow: "0 0 8px rgba(239,68,68,0.4)",  label: "CRASHED", dot: "bg-red-500 animate-pulse shadow-[0_0_6px_#ef4444]" },
 };
 
 // ─── Status Overview Panel ──────────────────────────────────────────

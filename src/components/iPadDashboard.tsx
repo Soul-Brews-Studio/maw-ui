@@ -7,13 +7,14 @@ import { ChibiPortrait } from "./ChibiPortrait";
 import { useFileAttach, FileInput, AttachmentChips } from "../hooks/useFileAttach";
 import { useDevice } from "../hooks/useDevice";
 import { FULL_COMMANDS } from "../quickCommands";
-import type { AgentState } from "../lib/types";
+import type { AgentState, PaneStatus } from "../lib/types";
 
 // --- Status colors ---
-const STATUS = {
-  busy: { color: "#fdd835", bg: "rgba(253,216,53,0.12)", label: "BUSY" },
-  ready: { color: "#4caf50", bg: "rgba(76,175,80,0.12)", label: "READY" },
-  idle: { color: "#666", bg: "rgba(102,102,102,0.08)", label: "IDLE" },
+const STATUS: Record<PaneStatus, { color: string; bg: string; label: string }> = {
+  busy:    { color: "#fdd835", bg: "rgba(253,216,53,0.12)", label: "BUSY" },
+  ready:   { color: "#4caf50", bg: "rgba(76,175,80,0.12)", label: "READY" },
+  idle:    { color: "#666",    bg: "rgba(102,102,102,0.08)", label: "IDLE" },
+  crashed: { color: "#ef4444", bg: "rgba(239,68,68,0.14)",   label: "CRASHED" },
 };
 
 // --- Agent Mini Card (touch-friendly 44px+ targets) ---
