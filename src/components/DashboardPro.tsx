@@ -53,7 +53,7 @@ interface FeedEvent {
 
 interface Session {
   name: string;
-  windows: Array<{ name: string; active: boolean }>;
+  windows: Array<{ name: string; active: boolean; repo?: string }>;
 }
 
 // ---- Data hook -----------------------------------------------------------

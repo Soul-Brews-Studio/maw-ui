@@ -17,6 +17,10 @@ const STATUS: Record<PaneStatus, { color: string; bg: string; label: string }> =
   crashed: { color: "#ef4444", bg: "rgba(239,68,68,0.14)",   label: "CRASHED" },
 };
 
+// ChibiPortrait only supports non-crashed states; fall back to idle.
+const chibiStatus = (s: PaneStatus): "busy" | "ready" | "idle" =>
+  s === "crashed" ? "idle" : s;
+
 // --- Agent Mini Card (touch-friendly 44px+ targets) ---
 function AgentCard({ agent, selected, onSelect }: { agent: AgentState; selected: boolean; onSelect: () => void }) {
   const color = agentColor(agent.name);
@@ -36,7 +40,7 @@ function AgentCard({ agent, selected, onSelect }: { agent: AgentState; selected:
       }}
     >
       <div className="relative flex-shrink-0">
-        <ChibiPortrait name={agent.name} size={44} status={agent.status} />
+        <ChibiPortrait name={agent.name} size={44} status={chibiStatus(agent.status)} />
         <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2" style={{ background: st.color, borderColor: "#0a0a0f", boxShadow: agent.status === "busy" ? `0 0 6px ${st.color}` : "none" }} />
       </div>
       <div className="flex-1 min-w-0 text-left">
@@ -68,7 +72,7 @@ function FleetSidebar({ agents, selectedAgent, onSelectAgent, collapsed }: {
             <button key={a.target} onClick={() => onSelectAgent(a)}
               className="relative rounded-lg active:scale-90 transition-transform"
               style={{ background: sel ? agentColor(a.name) + "20" : "transparent", padding: 2, border: sel ? `1px solid ${agentColor(a.name)}40` : "1px solid transparent" }}>
-              <ChibiPortrait name={a.name} size={32} status={a.status} />
+              <ChibiPortrait name={a.name} size={32} status={chibiStatus(a.status)} />
               <div className="absolute bottom-0 right-0 w-2 h-2 rounded-full" style={{ background: st.color, boxShadow: a.status === "busy" ? `0 0 4px ${st.color}` : "none" }} />
             </button>
           );
@@ -146,7 +150,7 @@ function TerminalPanel({ agent, send }: { agent: AgentState; send: (msg: object)
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ background: "#0e0e18", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <ChibiPortrait name={agent.name} size={48} status={agent.status} />
+        <ChibiPortrait name={agent.name} size={48} status={chibiStatus(agent.status)} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold capitalize" style={{ color }}>{name}</div>
           <div className="text-[10px] text-white/30 font-mono">{agent.target}</div>

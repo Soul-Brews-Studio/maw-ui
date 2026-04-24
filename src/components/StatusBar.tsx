@@ -163,7 +163,7 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
       {/* View-specific controls injected by parent */}
       {children}
 
-      {onToggleMute && <SoundButton muted={muted} onToggleMute={onToggleMute} />}
+      {onToggleMute && <SoundButton muted={muted ?? false} onToggleMute={onToggleMute} />}
 
       {isTouch && onJump && (
         <button

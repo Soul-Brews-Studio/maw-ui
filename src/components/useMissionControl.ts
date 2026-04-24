@@ -16,7 +16,7 @@ export function useMissionControl({ sessions, agents, send, onSelectAgent, addEv
   const [hoverPreview, setHoverPreview] = useState<{ agent: AgentState; room: { label: string; accent: string }; pos: { x: number; y: number } } | null>(null);
   const [pinnedPreview, setPinnedPreview] = useState<{ agent: AgentState; room: { label: string; accent: string }; pos: { x: number; y: number }; svgX: number; svgY: number } | null>(null);
   const pinnedByUser = useRef(false);
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [showSearch, setShowSearch] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
@@ -204,7 +204,7 @@ export function useMissionControl({ sessions, agents, send, onSelectAgent, addEv
   // Layout: optionally merge solo rooms into "Oracles" cluster, arrange in circle
   const layout = useMemo(() => {
     const sessionList = sessions.map((s) => ({
-      session: s,
+      session: { name: s.name, windows: s.windows.map((w) => w.name) },
       agents: sessionAgents.get(s.name) || [],
       style: roomStyle(s.name),
     }));

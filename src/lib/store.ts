@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import { apiUrl } from "./api";
 
 export interface RecentEntry {
@@ -321,7 +321,7 @@ export const useFleetStore = create<FleetStore>()(
     {
       name: "maw.fleet",
       version: 3,
-      storage: hybridStorage,
+      storage: createJSONStorage(() => hybridStorage),
       partialize: (s) => ({
         recentMap: s.recentMap,
         sortMode: s.sortMode,

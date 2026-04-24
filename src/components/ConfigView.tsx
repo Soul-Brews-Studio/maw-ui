@@ -402,7 +402,7 @@ export const ConfigView = memo(function ConfigView() {
                     <div className="px-3 pt-2 pb-1">
                       <span className="text-[9px] font-mono text-white/20 tracking-[2px] uppercase">Config</span>
                     </div>
-                    {root.map(renderFile)}
+                    {root.map(f => renderFile(f))}
                   </>
                 )}
                 {[...groups.entries()].map(([num, groupFiles]) => (

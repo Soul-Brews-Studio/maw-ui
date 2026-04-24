@@ -1,8 +1,9 @@
 import { memo } from "react";
-import type { AgentState } from "../lib/types";
+import type { AgentState, AgentEvent } from "../lib/types";
 
 interface BottomStatsProps {
   agents: AgentState[];
+  eventLog?: AgentEvent[];
 }
 
 export const BottomStats = memo(function BottomStats({ agents }: BottomStatsProps) {

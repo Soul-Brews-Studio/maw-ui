@@ -182,7 +182,7 @@ interface FleetGridProps {
 function useVisibleTargets(send: (msg: object) => void) {
   const visibleRef = useRef(new Set<string>());
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const syncToServer = useCallback(() => {
     clearTimeout(debounceRef.current);
@@ -255,7 +255,7 @@ export const FleetGrid = memo(function FleetGrid({
   // --- Preview state ---
   type PreviewInfo = { agent: AgentState; accent: string; label: string; pos: { x: number; y: number } };
   const [hoverPreview, setHoverPreview] = useState<PreviewInfo | null>(null);
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [pinnedPreview, setPinnedPreview] = useState<PreviewInfo | null>(null);
   const [pinnedAnimPos, setPinnedAnimPos] = useState<{ left: number; top: number } | null>(null);
   const pinnedRef = useRef<HTMLDivElement>(null);

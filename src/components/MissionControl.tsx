@@ -158,32 +158,35 @@ export const MissionControl = memo(function MissionControl({
       )}
 
       {/* Pinned Preview Card */}
-      {mc.pinnedPreview && mc.pinnedAnimPos && (
-        <div
-          ref={mc.pinnedRef}
-          className="absolute z-40 pointer-events-auto"
-          style={{
-            left: mc.pinnedAnimPos.left,
-            top: mc.pinnedAnimPos.top,
-            maxWidth: PREVIEW_CARD.width,
-            transition: "left 0.3s ease-out, top 0.3s ease-out",
-          }}
-        >
-          <HoverPreviewCard
-            agent={mc.pinnedPreview.agent}
-            roomLabel={mc.pinnedPreview.room.label}
-            accent={mc.pinnedPreview.room.accent}
-            pinned
-            send={send}
-            onFullscreen={mc.onPinnedFullscreen}
-            onClose={mc.onPinnedClose}
-            eventLog={eventLog}
-            addEvent={addEvent}
-            externalInputBuf={mc.getInputBuf(mc.pinnedPreview.agent.target)}
-            onInputBufChange={(val) => mc.setInputBuf(mc.pinnedPreview.agent.target, val)}
-          />
-        </div>
-      )}
+      {mc.pinnedPreview && mc.pinnedAnimPos && (() => {
+        const pinned = mc.pinnedPreview;
+        return (
+          <div
+            ref={mc.pinnedRef}
+            className="absolute z-40 pointer-events-auto"
+            style={{
+              left: mc.pinnedAnimPos.left,
+              top: mc.pinnedAnimPos.top,
+              maxWidth: PREVIEW_CARD.width,
+              transition: "left 0.3s ease-out, top 0.3s ease-out",
+            }}
+          >
+            <HoverPreviewCard
+              agent={pinned.agent}
+              roomLabel={pinned.room.label}
+              accent={pinned.room.accent}
+              pinned
+              send={send}
+              onFullscreen={mc.onPinnedFullscreen}
+              onClose={mc.onPinnedClose}
+              eventLog={eventLog}
+              addEvent={addEvent}
+              externalInputBuf={mc.getInputBuf(pinned.agent.target)}
+              onInputBufChange={(val) => mc.setInputBuf(pinned.agent.target, val)}
+            />
+          </div>
+        );
+      })()}
 
       {/* Multi-card bar */}
       {mc.multiCards.size > 0 && !mc.pinnedPreview && (
