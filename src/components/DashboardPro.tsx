@@ -302,7 +302,7 @@ function PanelShell({
 }: {
   title: string;
   subtitle?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">

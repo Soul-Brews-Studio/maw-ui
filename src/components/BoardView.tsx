@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useCallback, useMemo } from "react";
 import { useFleetStore } from "../lib/store";
-import type { BoardItem, BoardField, ScanResult, ScanMineResult, TimelineItem, AgentState, PulseBoard } from "../lib/types";
+import type { BoardItem, BoardField, ScanResult, ScanMineResult, TimelineItem, AgentState, PulseBoard, PaneStatus } from "../lib/types";
 import { TaskDetailOverlay } from "./TaskDetailOverlay";
 import { ProjectBoardView } from "./ProjectBoardView";
 
@@ -11,9 +11,9 @@ interface BoardViewProps {
 }
 
 /** Map oracle field value → live agent status */
-function useOracleStatusMap(agents: AgentState[]): Map<string, "busy" | "ready" | "idle"> {
+function useOracleStatusMap(agents: AgentState[]): Map<string, PaneStatus> {
   return useMemo(() => {
-    const m = new Map<string, "busy" | "ready" | "idle">();
+    const m = new Map<string, PaneStatus>();
     for (const a of agents) {
       // oracle names in board: "dev", "qa", "researcher", etc.
       // agent names in tmux: "dev-oracle", "researcher-oracle", or "dev-projectname"
@@ -244,8 +244,11 @@ function EditableCell({
 
 // --- Live oracle status indicator ---
 
-function OracleActivity({ status }: { status?: "busy" | "ready" | "idle" }) {
+function OracleActivity({ status }: { status?: PaneStatus }) {
   if (!status || status === "idle") return null;
+  if (status === "crashed") {
+    return <span className="inline-flex ml-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />;
+  }
   if (status === "busy") {
     return (
       <span className="relative inline-flex ml-1">
