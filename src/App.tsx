@@ -415,7 +415,7 @@ export function App() {
     jumpOverlay: showJump ? <JumpOverlay agents={agents} onSelect={onSelectAgent} onClose={onCloseJump} /> : null,
     inboxOverlay: showInbox ? <InboxOverlay send={send} onClose={onCloseInbox} /> : null,
     broadcastModal: (<>
-      {showBroadcast && <BroadcastModal agents={agents} send={send} onClose={onCloseBroadcast} />}
+      {showBroadcast && <BroadcastModal agents={agents} onClose={onCloseBroadcast} />}
       {showOracleSearch && <OracleSearch onClose={onCloseSearch} />}
     </>),
   };
