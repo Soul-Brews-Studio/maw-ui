@@ -7,6 +7,13 @@ import {
   STEWARD_STATUS_LABEL,
   type StewardRow,
 } from "../lib/stewardTypes";
+import {
+  APPROVAL_SCHEMA_VERSION,
+  compareSchemaVersion,
+  type ApprovalPayload,
+  type ApproveResult,
+  type SchemaVersionState,
+} from "../lib/d1ApproveTypes";
 import { WorkOrganizationOverview } from "./control-tower/WorkOrganizationOverview";
 import type { DecisionBrief, DecisionBriefOption, DecisionQueueSnapshot } from "../lib/companyOsTypes";
 import {
@@ -176,6 +183,40 @@ function extractStewardRows(payload: ControlTowerPayload | null): StewardRow[] {
   return [];
 }
 
+// Relative-time formatter for approval timestamps ("5m ago", "2h ago", "yesterday").
+function formatRelativeTs(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return iso;
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 60) return "เพิ่งหมาด";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 172_800) return "เมื่อวาน";
+  return `${Math.floor(diffSec / 86_400)}d ago`;
+}
+
+// D1 — read per-project approval state from payload.projects[] (steward source only).
+// Returns null when backend has not deployed D1 yet (no projects with `source` + `approval` keys);
+// in that case the StewardLogPanel renders read-only (no Approve button column).
+function extractApprovalIndex(payload: ControlTowerPayload | null): Map<string, ApprovalPayload | null> | null {
+  if (!payload) return null;
+  const projects = (payload as Record<string, unknown>).projects;
+  if (!Array.isArray(projects)) return null;
+  const map = new Map<string, ApprovalPayload | null>();
+  let sawApprovalKey = false;
+  for (const p of projects) {
+    if (!p || typeof p !== "object") continue;
+    const proj = p as Record<string, unknown>;
+    const source = proj.source;
+    const id = proj.id;
+    if (source !== "steward" || typeof id !== "string") continue;
+    if ("approval" in proj) sawApprovalKey = true;
+    const approval = proj.approval;
+    map.set(id, approval && typeof approval === "object" ? (approval as ApprovalPayload) : null);
+  }
+  return sawApprovalKey ? map : null;
+}
+
 export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
   const [payload, setPayload] = useState<ControlTowerPayload | null>(null);
   const [tab, setTab] = useState<TabKey>("dashboard");
@@ -185,6 +226,11 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
   const [modal, setModal] = useState<ModalState>(null);
   const [busyAction, setBusyAction] = useState<string>("");
   const [error, setError] = useState<string>("");
+  // D1 [Approve] state
+  const [approvalOverrides, setApprovalOverrides] = useState<Map<string, ApprovalPayload | null>>(new Map());
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ kind: "ok" | "err" | "info"; msg: string } | null>(null);
+  const [schemaState, setSchemaState] = useState<SchemaVersionState>({ kind: "missing" });
 
   const refresh = useCallback(async () => {
     try {
@@ -193,6 +239,8 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
       const data = await res.json() as ControlTowerPayload;
       setPayload(data);
       setError("");
+      const reportedVersion = (data as Record<string, unknown>).schema_version;
+      setSchemaState(compareSchemaVersion(reportedVersion));
     } catch (err) {
       setPayload(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -227,6 +275,109 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
   const decisionQueue = data.decisionQueue ?? workMap?.decisionQueue;
   const runnerSync = data.runnerSync;
   const stewardRows = extractStewardRows(payload);
+  // D1 — server approval state, with optimistic overrides on top.
+  const serverApprovalIndex = extractApprovalIndex(payload);
+  const approvalIndex: Map<string, ApprovalPayload | null> | null = serverApprovalIndex
+    ? new Map([...serverApprovalIndex, ...approvalOverrides])
+    : (approvalOverrides.size > 0 ? new Map(approvalOverrides) : null);
+
+  const onApprove = useCallback(async (projectId: string, projectName: string) => {
+    if (approvingIds.has(projectId)) return;
+    setApprovingIds((prev) => {
+      const next = new Set(prev);
+      next.add(projectId);
+      return next;
+    });
+    // Optimistic flip — assume Leo approver via cockpit-ui client.
+    const optimistic: ApprovalPayload = {
+      approver: "Leo",
+      approved_at: new Date().toISOString(),
+      sentinel_path: "(pending)",
+    };
+    setApprovalOverrides((prev) => {
+      const next = new Map(prev);
+      next.set(projectId, optimistic);
+      return next;
+    });
+    try {
+      const res = await fetch(apiUrl("/api/kaiju/control-tower/approve"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project_id: projectId, approver: "Leo", client: "cockpit-ui" }),
+      });
+      const result = (await res.json()) as ApproveResult;
+      if (res.ok && result.status === "approved") {
+        setApprovalOverrides((prev) => {
+          const next = new Map(prev);
+          next.set(projectId, {
+            approver: "Leo",
+            approved_at: result.approved_at,
+            sentinel_path: result.sentinel_path,
+          });
+          return next;
+        });
+        setToast({ kind: "ok", msg: `✅ อนุมัติแล้ว — ${projectName}` });
+      } else if (res.ok && result.status === "already_approved_by_you") {
+        setApprovalOverrides((prev) => {
+          const next = new Map(prev);
+          next.set(projectId, {
+            approver: result.original_approver,
+            approved_at: result.approved_at,
+            sentinel_path: result.sentinel_path,
+          });
+          return next;
+        });
+        setToast({ kind: "info", msg: `✅ อนุมัติแล้วก่อนหน้านี้ (${formatRelativeTs(result.approved_at)})` });
+      } else if (result.status === "approver_mismatch") {
+        // Someone else already approved — surface their identity, revert optimistic Leo.
+        setApprovalOverrides((prev) => {
+          const next = new Map(prev);
+          next.set(projectId, {
+            approver: result.original_approver,
+            approved_at: result.approved_at,
+            sentinel_path: result.sentinel_path,
+          });
+          return next;
+        });
+        setToast({ kind: "info", msg: `อนุมัติโดย ${result.original_approver} ไปแล้ว` });
+      } else {
+        // Revert optimistic — error path.
+        setApprovalOverrides((prev) => {
+          const next = new Map(prev);
+          next.delete(projectId);
+          return next;
+        });
+        const msg =
+          result.status === "project_not_found" ? `ไม่พบ project: ${result.project_id}`
+          : result.status === "approver_not_allowed" ? `Approver "${result.approver}" ไม่อยู่ใน allowed list`
+          : result.status === "client_not_allowed" ? `Client "${result.client}" ไม่อยู่ใน allowed list`
+          : result.status === "lock_timeout" ? "ระบบไม่พร้อม (file-lock timeout) — ลองใหม่"
+          : "ไม่สำเร็จ";
+        setToast({ kind: "err", msg });
+      }
+    } catch {
+      // Network / 5xx — revert and toast a soft retry hint.
+      setApprovalOverrides((prev) => {
+        const next = new Map(prev);
+        next.delete(projectId);
+        return next;
+      });
+      setToast({ kind: "err", msg: "ระบบไม่พร้อม — ลองใหม่ในไม่กี่วินาที" });
+    } finally {
+      setApprovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(projectId);
+        return next;
+      });
+    }
+  }, [approvingIds]);
+
+  // Auto-dismiss toast after 4s.
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   const selectedAgent = profiles.find((agent) => agent.id === selectedAgentId) ?? profiles[0];
   const selectedIssue = issues.find((issue) => issue.id === selectedIssueId) ?? issues[0];
@@ -299,10 +450,15 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
             </div>
           )}
 
+          <SchemaVersionBanner state={schemaState} />
+
           <div className="px-4 py-4 lg:px-6">
             {tab === "dashboard" && (
               <DashboardTab
                 stewardRows={stewardRows}
+                approvalIndex={approvalIndex}
+                approvingIds={approvingIds}
+                onApprove={onApprove}
                 connected={connected}
                 company={company}
                 agents={agents}
@@ -577,7 +733,39 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
           })}
         />
       )}
+      {toast && <Toast kind={toast.kind} msg={toast.msg} onDismiss={() => setToast(null)} />}
     </main>
+  );
+}
+
+function SchemaVersionBanner({ state }: { state: SchemaVersionState }) {
+  if (state.kind === "match" || state.kind === "missing" || state.kind === "patch-mismatch") return null;
+  const isMajor = state.kind === "major-mismatch";
+  const tone = isMajor ? "border-red-400/40 bg-red-500/10 text-red-100" : "border-amber-300/30 bg-amber-300/10 text-amber-100";
+  const prefix = isMajor ? "⚠ Schema major mismatch" : "ℹ Schema minor mismatch";
+  return (
+    <div role="status" aria-live="polite" className={`mx-4 mt-3 rounded-lg border px-4 py-2 text-xs ${tone}`}>
+      {prefix}: API <code>{state.got}</code> vs UI <code>{state.expected}</code>.
+      {isMajor ? " Cockpit running in degraded mode — refresh after redeploy." : " Some fields may be missing; refresh tolerated."}
+    </div>
+  );
+}
+
+function Toast({ kind, msg, onDismiss }: { kind: "ok" | "err" | "info"; msg: string; onDismiss: () => void }) {
+  const tone =
+    kind === "ok" ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
+    : kind === "err" ? "border-red-400/40 bg-red-500/15 text-red-100"
+    : "border-cyan-300/30 bg-cyan-500/10 text-cyan-100";
+  return (
+    <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 right-6 z-50">
+      <button
+        type="button"
+        onClick={onDismiss}
+        className={`pointer-events-auto rounded-lg border px-4 py-2.5 text-sm shadow-lg backdrop-blur-sm transition hover:opacity-90 ${tone}`}
+      >
+        {msg}
+      </button>
+    </div>
   );
 }
 
@@ -706,7 +894,13 @@ function TopPill({ label, value, tone }: { label: string; value: string; tone: C
   );
 }
 
-function StewardLogPanel({ rows }: { rows: StewardRow[] }) {
+function StewardLogPanel({ rows, approvalIndex, approvingIds, onApprove }: {
+  rows: StewardRow[];
+  approvalIndex: Map<string, ApprovalPayload | null> | null;
+  approvingIds: Set<string>;
+  onApprove: (projectId: string, projectName: string) => Promise<void>;
+}) {
+  const showApprovalCol = approvalIndex !== null;
   return (
     <section className="rounded-lg border border-cyan-300/20 bg-[#0b1220] p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -736,6 +930,7 @@ function StewardLogPanel({ rows }: { rows: StewardRow[] }) {
                 <th className="px-2 py-2 font-medium">Status</th>
                 <th className="px-2 py-2 font-medium">Why (purpose)</th>
                 <th className="px-2 py-2 font-medium">Drift check</th>
+                {showApprovalCol && <th className="px-2 py-2 font-medium">Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -767,6 +962,17 @@ function StewardLogPanel({ rows }: { rows: StewardRow[] }) {
                       ? <span className="rounded border border-emerald-300/25 bg-emerald-300/10 px-2 py-1 text-emerald-100">{row.drift_check}</span>
                       : <span className="text-white/30">—</span>}
                   </td>
+                  {showApprovalCol && (
+                    <td className="px-2 py-3">
+                      <ApprovalCell
+                        projectId={row.id}
+                        projectName={row.project_name}
+                        approval={approvalIndex.get(row.id) ?? null}
+                        pending={approvingIds.has(row.id)}
+                        onApprove={onApprove}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -777,7 +983,39 @@ function StewardLogPanel({ rows }: { rows: StewardRow[] }) {
   );
 }
 
-function DashboardTab({ connected, company, agents, profiles, issues, approvals, runs, budgets, workMap, decisionQueue, runnerSync, metrics, stewardRows, onOpenAgent, onOpenIssue, onResumeRun, onRequestReview, onDecisionAction, busy }: {
+function ApprovalCell({ projectId, projectName, approval, pending, onApprove }: {
+  projectId: string;
+  projectName: string;
+  approval: ApprovalPayload | null;
+  pending: boolean;
+  onApprove: (projectId: string, projectName: string) => Promise<void>;
+}) {
+  if (approval) {
+    const absoluteTs = approval.approved_at;
+    return (
+      <span
+        title={`Approved by ${approval.approver} at ${absoluteTs}`}
+        className="inline-flex items-center gap-1 rounded border border-emerald-300/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-100"
+      >
+        <span aria-hidden>✅</span>
+        Approved · {approval.approver} · {formatRelativeTs(absoluteTs)}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => { void onApprove(projectId, projectName); }}
+      aria-label={`Approve ${projectName}`}
+      className="inline-flex items-center gap-1 rounded border border-emerald-300/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-100 transition hover:border-emerald-200/55 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {pending ? "อนุมัติ..." : "Approve"}
+    </button>
+  );
+}
+
+function DashboardTab({ connected, company, agents, profiles, issues, approvals, runs, budgets, workMap, decisionQueue, runnerSync, metrics, stewardRows, approvalIndex, approvingIds, onApprove, onOpenAgent, onOpenIssue, onResumeRun, onRequestReview, onDecisionAction, busy }: {
   connected: boolean;
   company?: CompanyProfile;
   agents: AgentState[];
@@ -791,6 +1029,9 @@ function DashboardTab({ connected, company, agents, profiles, issues, approvals,
   runnerSync?: OracleRunnerSyncSnapshot;
   metrics: Record<"commerce" | "operations" | "finance" | "content", BusinessMetric[]>;
   stewardRows: StewardRow[];
+  approvalIndex: Map<string, ApprovalPayload | null> | null;
+  approvingIds: Set<string>;
+  onApprove: (projectId: string, projectName: string) => Promise<void>;
   onOpenAgent: (id: string) => void;
   onOpenIssue: (id: string) => void;
   onResumeRun: (id: string) => void;
@@ -808,7 +1049,7 @@ function DashboardTab({ connected, company, agents, profiles, issues, approvals,
 
   return (
     <div className="space-y-4">
-      <StewardLogPanel rows={stewardRows} />
+      <StewardLogPanel rows={stewardRows} approvalIndex={approvalIndex} approvingIds={approvingIds} onApprove={onApprove} />
 
       <WorkOrganizationOverview
         workMap={dashboardWorkMap}
