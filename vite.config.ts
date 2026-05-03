@@ -24,6 +24,7 @@ export default defineConfig({
         mission: resolve(__dirname, "mission.html"),
         fleet: resolve(__dirname, "fleet.html"),
         dashboard: resolve(__dirname, "dashboard.html"),
+        control_tower: resolve(__dirname, "control_tower.html"),
         terminal: resolve(__dirname, "terminal.html"),
         office: resolve(__dirname, "office.html"),
         overview: resolve(__dirname, "overview.html"),
