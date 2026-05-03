@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiUrl } from "../lib/api";
 import type { AgentState } from "../lib/types";
 import { ProjectOperatingRoom } from "./control-tower/ProjectOperatingRoom";
+import { ProjectDetailDrawer } from "./control-tower/ProjectDetailDrawer";
 import {
   STEWARD_STATUS_COLOR,
   STEWARD_STATUS_LABEL,
@@ -183,6 +184,24 @@ function extractStewardRows(payload: ControlTowerPayload | null): StewardRow[] {
   return [];
 }
 
+// D4 — parse `#project=ID` from window.location.hash; returns null if absent or non-browser env.
+function parseProjectIdFromHash(): string | null {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash;
+  const match = hash.match(/[?#&]project=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setProjectIdInHash(projectId: string | null): void {
+  if (typeof window === "undefined") return;
+  if (projectId) {
+    const next = `#project=${encodeURIComponent(projectId)}`;
+    if (window.location.hash !== next) window.history.replaceState(null, "", next);
+  } else if (window.location.hash.startsWith("#project=")) {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+}
+
 // Relative-time formatter for approval timestamps ("5m ago", "2h ago", "yesterday").
 function formatRelativeTs(iso: string): string {
   const t = new Date(iso).getTime();
@@ -231,6 +250,8 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ kind: "ok" | "err" | "info"; msg: string } | null>(null);
   const [schemaState, setSchemaState] = useState<SchemaVersionState>({ kind: "missing" });
+  // D4 drawer state — projectId synced with URL hash for deep linking.
+  const [drawerProjectId, setDrawerProjectId] = useState<string | null>(() => parseProjectIdFromHash());
 
   const refresh = useCallback(async () => {
     try {
@@ -379,6 +400,23 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  // D4 — listen for hashchange (browser back/forward + pasted-link entry).
+  useEffect(() => {
+    const onHash = () => setDrawerProjectId(parseProjectIdFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const openProjectDrawer = useCallback((projectId: string) => {
+    setDrawerProjectId(projectId);
+    setProjectIdInHash(projectId);
+  }, []);
+
+  const closeProjectDrawer = useCallback(() => {
+    setDrawerProjectId(null);
+    setProjectIdInHash(null);
+  }, []);
+
   const selectedAgent = profiles.find((agent) => agent.id === selectedAgentId) ?? profiles[0];
   const selectedIssue = issues.find((issue) => issue.id === selectedIssueId) ?? issues[0];
   const liveAgent = selectedAgent ? matchLiveAgent(selectedAgent, agents) : undefined;
@@ -459,6 +497,7 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
                 approvalIndex={approvalIndex}
                 approvingIds={approvingIds}
                 onApprove={onApprove}
+                onOpenProject={openProjectDrawer}
                 connected={connected}
                 company={company}
                 agents={agents}
@@ -734,6 +773,7 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
         />
       )}
       {toast && <Toast kind={toast.kind} msg={toast.msg} onDismiss={() => setToast(null)} />}
+      <ProjectDetailDrawer projectId={drawerProjectId} onClose={closeProjectDrawer} />
     </main>
   );
 }
@@ -894,11 +934,12 @@ function TopPill({ label, value, tone }: { label: string; value: string; tone: C
   );
 }
 
-function StewardLogPanel({ rows, approvalIndex, approvingIds, onApprove }: {
+function StewardLogPanel({ rows, approvalIndex, approvingIds, onApprove, onOpenProject }: {
   rows: StewardRow[];
   approvalIndex: Map<string, ApprovalPayload | null> | null;
   approvingIds: Set<string>;
   onApprove: (projectId: string, projectName: string) => Promise<void>;
+  onOpenProject: (projectId: string) => void;
 }) {
   const showApprovalCol = approvalIndex !== null;
   return (
@@ -935,10 +976,26 @@ function StewardLogPanel({ rows, approvalIndex, approvingIds, onApprove }: {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-white/[0.04] align-top hover:bg-white/[0.015]">
+                <tr
+                  key={row.id}
+                  className="cursor-pointer border-b border-white/[0.04] align-top transition hover:bg-white/[0.04]"
+                  onClick={(e) => {
+                    // Avoid opening drawer when user clicked the inline Approve button.
+                    const target = e.target as HTMLElement;
+                    if (target.closest("button")) return;
+                    onOpenProject(row.id);
+                  }}
+                >
                   <td className="px-2 py-3 text-white/85">
                     <div className="text-xs uppercase tracking-[0.5px] text-white/35">#{row.row_number}</div>
-                    <div className="font-semibold">{row.project_name}</div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onOpenProject(row.id); }}
+                      className="text-left font-semibold text-white hover:text-cyan-200"
+                      aria-label={`Open detail drawer for ${row.project_name}`}
+                    >
+                      {row.project_name}
+                    </button>
                   </td>
                   <td className="px-2 py-3 text-white/65">{row.received_from ?? "—"}</td>
                   <td className="px-2 py-3 font-medium text-white/80">{row.current_owner ?? "—"}</td>
@@ -1015,7 +1072,7 @@ function ApprovalCell({ projectId, projectName, approval, pending, onApprove }: 
   );
 }
 
-function DashboardTab({ connected, company, agents, profiles, issues, approvals, runs, budgets, workMap, decisionQueue, runnerSync, metrics, stewardRows, approvalIndex, approvingIds, onApprove, onOpenAgent, onOpenIssue, onResumeRun, onRequestReview, onDecisionAction, busy }: {
+function DashboardTab({ connected, company, agents, profiles, issues, approvals, runs, budgets, workMap, decisionQueue, runnerSync, metrics, stewardRows, approvalIndex, approvingIds, onApprove, onOpenProject, onOpenAgent, onOpenIssue, onResumeRun, onRequestReview, onDecisionAction, busy }: {
   connected: boolean;
   company?: CompanyProfile;
   agents: AgentState[];
@@ -1032,6 +1089,7 @@ function DashboardTab({ connected, company, agents, profiles, issues, approvals,
   approvalIndex: Map<string, ApprovalPayload | null> | null;
   approvingIds: Set<string>;
   onApprove: (projectId: string, projectName: string) => Promise<void>;
+  onOpenProject: (projectId: string) => void;
   onOpenAgent: (id: string) => void;
   onOpenIssue: (id: string) => void;
   onResumeRun: (id: string) => void;
@@ -1049,7 +1107,7 @@ function DashboardTab({ connected, company, agents, profiles, issues, approvals,
 
   return (
     <div className="space-y-4">
-      <StewardLogPanel rows={stewardRows} approvalIndex={approvalIndex} approvingIds={approvingIds} onApprove={onApprove} />
+      <StewardLogPanel rows={stewardRows} approvalIndex={approvalIndex} approvingIds={approvingIds} onApprove={onApprove} onOpenProject={onOpenProject} />
 
       <WorkOrganizationOverview
         workMap={dashboardWorkMap}
