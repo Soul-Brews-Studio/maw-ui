@@ -7,8 +7,31 @@ import {
   type ProductionBatchDraft,
   type StockMovementDraft,
 } from "../lib/commerceOfficeTypes";
+import {
+  AGENT_OFFICE_AGENTS,
+  mockAgentOfficeRow,
+  type AgentOfficeRow,
+  type AgentOfficeStatus,
+} from "../lib/agentOfficeTypes";
 
 type DraftKind = "packing" | "stock" | "production";
+
+function agentOfficeStatusColor(status: AgentOfficeStatus): string {
+  if (status === "active") return "#22c55e";
+  if (status === "blocked") return "#ef4444";
+  return "#94a3b8"; // idle
+}
+
+function formatRelativeTime(iso: string | null): string {
+  if (!iso) return "never";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "never";
+  const diff = Date.now() - t;
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
 
 function statusColor(status?: string) {
   if (status === "done" || status === "active") return "#22c55e";
@@ -32,6 +55,9 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
 
 export function KaijuCommerceOffice() {
   const [state, setState] = useState<CommerceOfficeState>(EMPTY_COMMERCE_OFFICE_STATE);
+  const [agentRows, setAgentRows] = useState<AgentOfficeRow[]>(() =>
+    AGENT_OFFICE_AGENTS.map((a) => mockAgentOfficeRow(a)),
+  );
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -42,6 +68,16 @@ export function KaijuCommerceOffice() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+    try {
+      const rows = await apiRequest<AgentOfficeRow[] | { rows: AgentOfficeRow[] }>("/commerce-office/agents");
+      const list = Array.isArray(rows) ? rows : rows?.rows;
+      if (Array.isArray(list)) {
+        const byAgent = new Map(list.map((r) => [r.agent, r]));
+        setAgentRows(AGENT_OFFICE_AGENTS.map((a) => byAgent.get(a) ?? mockAgentOfficeRow(a)));
+      }
+    } catch {
+      // endpoint not yet wired by FORGE — keep mock rows; don't surface error
     }
   }, []);
 
@@ -95,6 +131,14 @@ export function KaijuCommerceOffice() {
             {error}
           </div>
         )}
+
+        <Panel title="Agent Office" meta={`${agentRows.length} agents`}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {agentRows.map((row) => (
+              <AgentOfficeCard key={row.agent} row={row} />
+            ))}
+          </div>
+        </Panel>
 
         <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
           <QuickAction
@@ -296,4 +340,30 @@ function BoundaryRow({ label, value, tone }: { label: string; value: string; ton
 
 function Empty({ label }: { label: string }) {
   return <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-3 text-sm text-white/35">{label}</div>;
+}
+
+function AgentOfficeCard({ row }: { row: AgentOfficeRow }) {
+  const color = agentOfficeStatusColor(row.status);
+  return (
+    <div className="rounded-lg border border-white/[0.07] bg-black/25 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold tracking-[1.5px] text-white/85">{row.agent}</h3>
+        {row.is_mock && (
+          <span className="rounded border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[1px] text-amber-100">
+            MOCK
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+        <span className="text-[10px] uppercase tracking-[1px]" style={{ color }}>{row.status}</span>
+        <span className="ml-auto text-[10px] text-white/35">→ {row.surfaced_for}</span>
+      </div>
+      <p className="mt-3 text-sm font-medium leading-5 text-white/80">{row.activity_summary}</p>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-white/45">
+        <span>{row.output_count} outputs</span>
+        <span>{formatRelativeTime(row.last_run_ts)}</span>
+      </div>
+    </div>
+  );
 }

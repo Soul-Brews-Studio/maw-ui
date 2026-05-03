@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiUrl } from "../lib/api";
 import type { AgentState } from "../lib/types";
 import { ProjectOperatingRoom } from "./control-tower/ProjectOperatingRoom";
+import {
+  STEWARD_STATUS_COLOR,
+  STEWARD_STATUS_LABEL,
+  type StewardRow,
+} from "../lib/stewardTypes";
 import { WorkOrganizationOverview } from "./control-tower/WorkOrganizationOverview";
 import type { DecisionBrief, DecisionBriefOption, DecisionQueueSnapshot } from "../lib/companyOsTypes";
 import {
@@ -156,6 +161,21 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   return body as T;
 }
 
+// FORGE may attach steward rows under any of these payload keys; accept all.
+function extractStewardRows(payload: ControlTowerPayload | null): StewardRow[] {
+  if (!payload) return [];
+  const candidates: Array<unknown> = [
+    (payload as Record<string, unknown>).stewardRows,
+    (payload as Record<string, unknown>).steward_rows,
+    ((payload as Record<string, unknown>).steward as Record<string, unknown> | undefined)?.rows,
+    ((payload as Record<string, unknown>).stewardLog as Record<string, unknown> | undefined)?.rows,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c as StewardRow[];
+  }
+  return [];
+}
+
 export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
   const [payload, setPayload] = useState<ControlTowerPayload | null>(null);
   const [tab, setTab] = useState<TabKey>("dashboard");
@@ -206,6 +226,7 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
   const workMap = data.workMap;
   const decisionQueue = data.decisionQueue ?? workMap?.decisionQueue;
   const runnerSync = data.runnerSync;
+  const stewardRows = extractStewardRows(payload);
 
   const selectedAgent = profiles.find((agent) => agent.id === selectedAgentId) ?? profiles[0];
   const selectedIssue = issues.find((issue) => issue.id === selectedIssueId) ?? issues[0];
@@ -281,6 +302,7 @@ export function KaijuControlTower({ agents, connected, onSelectAgent }: Props) {
           <div className="px-4 py-4 lg:px-6">
             {tab === "dashboard" && (
               <DashboardTab
+                stewardRows={stewardRows}
                 connected={connected}
                 company={company}
                 agents={agents}
@@ -684,7 +706,78 @@ function TopPill({ label, value, tone }: { label: string; value: string; tone: C
   );
 }
 
-function DashboardTab({ connected, company, agents, profiles, issues, approvals, runs, budgets, workMap, decisionQueue, runnerSync, metrics, onOpenAgent, onOpenIssue, onResumeRun, onRequestReview, onDecisionAction, busy }: {
+function StewardLogPanel({ rows }: { rows: StewardRow[] }) {
+  return (
+    <section className="rounded-lg border border-cyan-300/20 bg-[#0b1220] p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <SectionHeader
+            title="Steward Log — Active Projects"
+            meta={rows.length === 0 ? "ยังไม่ wire (รอ FORGE F2)" : `${rows.length} active rows`}
+          />
+        </div>
+        <div className="text-[10px] uppercase tracking-[1.5px] text-white/35">
+          source: ψ/memory/david/active-projects.md
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="rounded-md border border-amber-300/20 bg-amber-300/5 px-3 py-3 text-xs text-amber-100/70">
+          ยังไม่มี Steward log feed — UI พร้อม render ทันทีที่ FORGE ship F2 endpoint
+          (รองรับ payload key: <code>stewardRows</code> / <code>steward.rows</code> / <code>stewardLog.rows</code>).
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/[0.08] text-[10px] uppercase tracking-[1.5px] text-white/45">
+                <th className="px-2 py-2 font-medium">Project</th>
+                <th className="px-2 py-2 font-medium">Received from</th>
+                <th className="px-2 py-2 font-medium">Current owner</th>
+                <th className="px-2 py-2 font-medium">Status</th>
+                <th className="px-2 py-2 font-medium">Why (purpose)</th>
+                <th className="px-2 py-2 font-medium">Drift check</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-white/[0.04] align-top hover:bg-white/[0.015]">
+                  <td className="px-2 py-3 text-white/85">
+                    <div className="text-xs uppercase tracking-[0.5px] text-white/35">#{row.row_number}</div>
+                    <div className="font-semibold">{row.project_name}</div>
+                  </td>
+                  <td className="px-2 py-3 text-white/65">{row.received_from ?? "—"}</td>
+                  <td className="px-2 py-3 font-medium text-white/80">{row.current_owner ?? "—"}</td>
+                  <td className="px-2 py-3">
+                    <span
+                      className="rounded border px-2 py-1 text-[11px] font-medium"
+                      style={{
+                        color: STEWARD_STATUS_COLOR[row.status],
+                        borderColor: `${STEWARD_STATUS_COLOR[row.status]}55`,
+                        background: `${STEWARD_STATUS_COLOR[row.status]}15`,
+                      }}
+                    >
+                      {STEWARD_STATUS_LABEL[row.status]}
+                    </span>
+                  </td>
+                  <td className="px-2 py-3 text-sm leading-5 text-white/75">
+                    {row.why ?? <span className="text-white/30">—</span>}
+                  </td>
+                  <td className="px-2 py-3 text-xs">
+                    {row.drift_check
+                      ? <span className="rounded border border-emerald-300/25 bg-emerald-300/10 px-2 py-1 text-emerald-100">{row.drift_check}</span>
+                      : <span className="text-white/30">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DashboardTab({ connected, company, agents, profiles, issues, approvals, runs, budgets, workMap, decisionQueue, runnerSync, metrics, stewardRows, onOpenAgent, onOpenIssue, onResumeRun, onRequestReview, onDecisionAction, busy }: {
   connected: boolean;
   company?: CompanyProfile;
   agents: AgentState[];
@@ -697,6 +790,7 @@ function DashboardTab({ connected, company, agents, profiles, issues, approvals,
   decisionQueue?: DecisionQueueSnapshot;
   runnerSync?: OracleRunnerSyncSnapshot;
   metrics: Record<"commerce" | "operations" | "finance" | "content", BusinessMetric[]>;
+  stewardRows: StewardRow[];
   onOpenAgent: (id: string) => void;
   onOpenIssue: (id: string) => void;
   onResumeRun: (id: string) => void;
@@ -714,6 +808,8 @@ function DashboardTab({ connected, company, agents, profiles, issues, approvals,
 
   return (
     <div className="space-y-4">
+      <StewardLogPanel rows={stewardRows} />
+
       <WorkOrganizationOverview
         workMap={dashboardWorkMap}
         onDecisionAction={onDecisionAction}
