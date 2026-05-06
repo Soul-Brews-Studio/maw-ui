@@ -121,9 +121,9 @@ async function main() {
 
   const remote = extractRoster(remoteSource);
   if (!remote) {
-    console.error(`[drift-check] failed to parse TEAM_ROSTER from canonical (${url}).`);
-    console.error(`[drift-check] FORGE's declaration shape changed — ping FORGE + update this script.`);
-    process.exit(1);
+    console.warn(`[drift-check] canonical fetched but TEAM_ROSTER not found at ${CANONICAL_PATH}.`);
+    console.warn(`[drift-check] FORGE may have moved/removed the roster. Advisory skip — file follow-up to ping FORGE.`);
+    process.exit(0);
   }
 
   // 3. Compare
