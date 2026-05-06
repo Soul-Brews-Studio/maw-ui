@@ -27,6 +27,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # TEAM_ROSTER drift check — promoted from "retro item" to CI gate per FORGE ACCEPT 2026-04-18.
+  # Canonical lives in Soul-Brews-Studio/maw-js:src/shared/cross-team-queue.types.ts
+  # (ADR-002). This job fails the PR if VELA's mirror drifts.
+  #
+  # Override MAW_JS_REF during cross-repo co-dev (e.g. feature/cross-team-queue)
+  # before FORGE's PR merges to maw-js main. Remove override once merged.
+  check-team-roster-drift:
+    name: check TEAM_ROSTER drift vs canonical (maw-js)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run drift check
+        env:
+          MAW_JS_REPO: Soul-Brews-Studio/maw-js
+          MAW_JS_REF: main
+        run: node scripts/check-team-roster-drift.mjs
+
   build:
     name: build (node 20)
     runs-on: ubuntu-latest

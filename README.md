@@ -25,6 +25,7 @@ maw ui --dev
 | Office | `index.html` | Agent grid — status, PTY terminals, WebSocket feed |
 | Fleet | `fleet.html` | Fleet-wide view — all sessions across all nodes |
 | Dashboard | `dashboard.html` | Overview metrics + agent status |
+| Kaiju Control Tower | `control_tower.html` | Agent Ops + business operations surface for Kaiju AI Office |
 | Terminal | `terminal.html` | Full xterm.js terminal per agent |
 | Mission | `mission.html` | Mission control — active tasks + progress |
 | Chat | `chat.html` | Cross-agent messaging |
