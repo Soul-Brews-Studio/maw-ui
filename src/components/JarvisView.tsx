@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 
 const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
+const JarvisVoice = lazy(() => import("./JarvisVoice").then(m => ({ default: m.JarvisVoice })));
 
 const JARVIS_API = "/api/jarvis";
 
@@ -46,7 +47,7 @@ export const JarvisView = memo(function JarvisView() {
   const [patterns, setPatterns] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"chat" | "analytics" | "epos" | "mycelium">("chat");
+  const [tab, setTab] = useState<"chat" | "analytics" | "epos" | "mycelium" | "voice">("chat");
   const [myceliumTarget, setMyceliumTarget] = useState(() => localStorage.getItem("jarvis-mycelium-target") || "01-oracles:0");
   const [myceliumInput, setMyceliumInput] = useState(myceliumTarget);
   const [botEnabled, setBotEnabled] = useState(true);
@@ -124,8 +125,8 @@ export const JarvisView = memo(function JarvisView() {
 
       {/* ── Tabs + Bot Toggle ── */}
       <div className="flex items-center gap-1 px-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-        {(["chat", "analytics", "epos", "mycelium"] as const).map(t => {
-          const cfg = { chat: { label: "Chat Feed", bg: "34,211,238" }, analytics: { label: "Analytics", bg: "168,85,247" }, epos: { label: "ePOS", bg: "251,191,36" }, mycelium: { label: "🍄 Mycelium", bg: "163,230,53" } };
+        {(["chat", "analytics", "epos", "mycelium", "voice"] as const).map(t => {
+          const cfg = { chat: { label: "Chat Feed", bg: "34,211,238" }, analytics: { label: "Analytics", bg: "168,85,247" }, epos: { label: "ePOS", bg: "251,191,36" }, mycelium: { label: "🍄 Mycelium", bg: "163,230,53" }, voice: { label: "🎙 Voice", bg: "74,158,255" } };
           const c = cfg[t];
           return (
             <button key={t} onClick={() => setTab(t)}
@@ -450,6 +451,19 @@ export const JarvisView = memo(function JarvisView() {
             🍄 Mycelium chat — xterm.js over /ws/pty. Enter target name + press Enter or Attach.
           </div>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════
+           VOICE TAB — Voice Oracle (Helm's pipeline)
+         ═══════════════════════════════════ */}
+      {tab === "voice" && (
+        <Suspense fallback={
+          <div className="flex items-center justify-center text-white/30 text-sm font-mono py-12">
+            Loading Voice Oracle...
+          </div>
+        }>
+          <JarvisVoice />
+        </Suspense>
       )}
     </div>
   );
