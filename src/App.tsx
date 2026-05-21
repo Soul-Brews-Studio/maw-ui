@@ -22,7 +22,8 @@ import FederationView from "./components/FederationView";
 import DashboardPro from "./components/DashboardPro";
 import { ConnectPage } from "./components/ConnectPage";
 import { isRemote } from "./lib/api";
-// BoBFaceView, BoardView, LoopsView, JarvisView, HallOfFameView, IPadDashboard
+import { JarvisView } from "./components/JarvisView";
+// BoBFaceView, BoardView, LoopsView, HallOfFameView, IPadDashboard
 // removed from nav — no upstream backends. Files kept per Nothing is Deleted.
 import { LoadingSkeleton } from "./components/LoadingSkeleton";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
@@ -546,7 +547,15 @@ export function App() {
     return null;
   }
 
-  // board, loops, jarvis, fame, bob, ipad routes removed — no upstream backends.
+  if (route === "jarvis") {
+    return (
+      <Layout activeView="jarvis" {...layoutProps}>
+        <JarvisView />
+      </Layout>
+    );
+  }
+
+  // board, loops, fame, bob, ipad routes removed — no upstream backends.
   // Component files kept in src/components/ per Nothing is Deleted.
 
   // Fallback → office
