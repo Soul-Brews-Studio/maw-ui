@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { ansiToHtml, processCapture } from "../lib/ansi";
 import { agentColor, PREVIEW_CARD } from "../lib/constants";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { useAgentPreview } from "../lib/previewStore";
 import type { AgentState, AgentEvent } from "../lib/types";
 
@@ -152,7 +152,7 @@ export const HoverPreviewCard = memo(function HoverPreviewCard({
     let active = true;
     async function poll() {
       try {
-        const res = await fetch(apiUrl(`/api/capture?target=${encodeURIComponent(agent.target)}`));
+        const res = await apiFetch(`/api/capture?target=${encodeURIComponent(agent.target)}`);
         const data = await res.json();
         if (active) setContent(prev => {
           const next = data.content || "";

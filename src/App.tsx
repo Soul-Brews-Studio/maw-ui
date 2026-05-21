@@ -21,7 +21,8 @@ import { DashboardView } from "./components/DashboardView";
 import FederationView from "./components/FederationView";
 import DashboardPro from "./components/DashboardPro";
 import { ConnectPage } from "./components/ConnectPage";
-import { isRemote, activeHost, clearStoredHost } from "./lib/api";
+import { isRemote, activeHost, clearStoredHost, resetHttpHealth } from "./lib/api";
+import { useHttpHealth } from "./hooks/useHttpHealth";
 import { JarvisView } from "./components/JarvisView";
 // BoBFaceView, BoardView, LoopsView, HallOfFameView, IPadDashboard
 // removed from nav — no upstream backends. Files kept per Nothing is Deleted.
@@ -197,18 +198,24 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
     ? "relative flex flex-col h-screen overflow-hidden"
     : "relative min-h-screen";
 
-  // Self-healing: if remote host hasn't connected after 8s, surface a banner
-  // so the user can disconnect/change host without DevTools.
-  const [stale, setStale] = useState(false);
+  // Self-healing: surface a banner when the remote host is unreachable.
+  // Two trip conditions:
+  //   (a) WS hasn't opened within 8s (host wrong / unreachable)
+  //   (b) Circuit breaker tripped (Chrome PNA blocks, 5xx storm, etc.)
+  // (b) catches the case where WS connects but HTTP polls are blocked.
+  const httpHealth = useHttpHealth();
+  const [wsLate, setWsLate] = useState(false);
   useEffect(() => {
     if (!isRemote) return;
-    if (connected) { setStale(false); return; }
-    const t = setTimeout(() => setStale(true), 8000);
+    if (connected) { setWsLate(false); return; }
+    const t = setTimeout(() => setWsLate(true), 8000);
     return () => clearTimeout(t);
   }, [connected]);
+  const stale = isRemote && (wsLate || !httpHealth.healthy);
 
   const onDisconnect = useCallback(() => {
     clearStoredHost();
+    resetHttpHealth();
     window.location.reload();
   }, []);
 
@@ -236,10 +243,14 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
             <span className="text-lg">⚠️</span>
             <div className="flex-1 min-w-0">
               <p className="font-mono text-xs" style={{ color: "#fca5a5" }}>
-                Can't reach <span className="font-bold">{activeHost}</span>
+                {!httpHealth.healthy
+                  ? <>Requests blocked — <span className="font-bold">{activeHost}</span></>
+                  : <>Can't reach <span className="font-bold">{activeHost}</span></>}
               </p>
               <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-                Host unreachable from this network. Disconnect to pick another, or check the LAN.
+                {!httpHealth.healthy
+                  ? <>Circuit open after {httpHealth.consecutiveFails} failures ({httpHealth.lastError || "network"}). Chrome PNA may be blocking HTTP→LAN — try https:// or change host.</>
+                  : <>Host unreachable from this network. Disconnect to pick another, or check the LAN.</>}
               </p>
             </div>
             <button

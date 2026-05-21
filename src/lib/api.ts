@@ -115,3 +115,118 @@ export function wsUrl(path: string): string {
   }
   return `${r.wsProto}//${r.host}${path}`;
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// apiFetch — circuit-breaker wrapper around fetch.
+//
+// Why: when host is unreachable (LAN down, Chrome PNA blocking HTTP from an
+// HTTPS context, DNS gone) the dashboard's six pollers will fire thousands of
+// requests/minute, all failing silently. apiFetch trips a circuit after N
+// consecutive failures and short-circuits further calls for OPEN_MS, with one
+// half-open probe to test recovery. Health is exposed so the UI can banner.
+// ────────────────────────────────────────────────────────────────────────
+
+const FAIL_THRESHOLD = 5;
+const OPEN_MS = 30_000;
+
+type Health = {
+  healthy: boolean;          // false once circuit trips
+  consecutiveFails: number;
+  openUntil: number;         // timestamp; 0 when closed
+  lastError: string | null;
+};
+
+let healthSnapshot: Health = { healthy: true, consecutiveFails: 0, openUntil: 0, lastError: null };
+const listeners = new Set<() => void>();
+
+function commit(next: Partial<Health>) {
+  const merged = { ...healthSnapshot, ...next };
+  if (merged.healthy === healthSnapshot.healthy
+      && merged.consecutiveFails === healthSnapshot.consecutiveFails
+      && merged.openUntil === healthSnapshot.openUntil
+      && merged.lastError === healthSnapshot.lastError) return;
+  healthSnapshot = merged;
+  listeners.forEach(l => l());
+}
+
+export function getHttpHealth(): Health {
+  return healthSnapshot;
+}
+
+export function subscribeHttpHealth(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
+}
+
+/** Force-close the circuit (e.g. after user changes host). */
+export function resetHttpHealth(): void {
+  commit({ healthy: true, consecutiveFails: 0, openUntil: 0, lastError: null });
+}
+
+// Is the active host private (LAN / localhost / .local)?
+// Chrome 142+ requires targetAddressSpace: 'local' on such fetches from HTTPS.
+function isPrivateHost(): boolean {
+  const r = resolveHost();
+  if (!r) return false;
+  const host = r.host.split(":")[0].toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".local")) return true;
+  if (/^10\./.test(host)) return true;
+  if (/^192\.168\./.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  return false;
+}
+
+/**
+ * Drop-in fetch wrapper. Same signature, plus:
+ *   - Trips a circuit breaker after FAIL_THRESHOLD consecutive failures
+ *   - Adds targetAddressSpace: 'local' for private-network hosts (Chrome PNA)
+ *   - While circuit is open, throws immediately (one probe per OPEN_MS allowed)
+ *
+ * Callers should still .catch — this never resolves on circuit-open.
+ */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = path.startsWith("http") ? path : apiUrl(path);
+  const now = Date.now();
+
+  // Circuit open: allow exactly one probe per OPEN_MS; reject the rest.
+  if (!healthSnapshot.healthy && now < healthSnapshot.openUntil) {
+    throw new Error("circuit_open");
+  }
+
+  // Chrome PNA: opt the request into the local-network address space when the
+  // active host is private. Older Chromes ignore the option; newer ones use it
+  // to drive the permission prompt instead of a hard block.
+  const finalInit: RequestInit & { targetAddressSpace?: "local" | "private" } = { ...init };
+  if (isPrivateHost()) {
+    finalInit.targetAddressSpace = "local";
+  }
+
+  try {
+    const res = await fetch(url, finalInit);
+    // 5xx is still a "real" failure for breaker purposes; 4xx is not.
+    if (res.status >= 500) throw new Error(`http_${res.status}`);
+    // Success → reset.
+    if (!healthSnapshot.healthy || healthSnapshot.consecutiveFails > 0) {
+      commit({ healthy: true, consecutiveFails: 0, openUntil: 0, lastError: null });
+    }
+    return res;
+  } catch (err) {
+    const fails = healthSnapshot.consecutiveFails + 1;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (fails >= FAIL_THRESHOLD) {
+      commit({ healthy: false, consecutiveFails: fails, openUntil: now + OPEN_MS, lastError: msg });
+    } else {
+      commit({ consecutiveFails: fails, lastError: msg });
+    }
+    throw err;
+  }
+}
+
+/** Convenience: apiFetch + .json(), returns null on any failure. */
+export async function apiFetchJson<T = any>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    const r = await apiFetch(path, init);
+    if (!r.ok) return null;
+    return await r.json() as T;
+  } catch { return null; }
+}
