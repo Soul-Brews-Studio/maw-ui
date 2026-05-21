@@ -21,7 +21,7 @@ import { DashboardView } from "./components/DashboardView";
 import FederationView from "./components/FederationView";
 import DashboardPro from "./components/DashboardPro";
 import { ConnectPage } from "./components/ConnectPage";
-import { isRemote } from "./lib/api";
+import { isRemote, activeHost, clearStoredHost } from "./lib/api";
 import { JarvisView } from "./components/JarvisView";
 // BoBFaceView, BoardView, LoopsView, HallOfFameView, IPadDashboard
 // removed from nav — no upstream backends. Files kept per Nothing is Deleted.
@@ -197,6 +197,21 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
     ? "relative flex flex-col h-screen overflow-hidden"
     : "relative min-h-screen";
 
+  // Self-healing: if remote host hasn't connected after 8s, surface a banner
+  // so the user can disconnect/change host without DevTools.
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    if (!isRemote) return;
+    if (connected) { setStale(false); return; }
+    const t = setTimeout(() => setStale(true), 8000);
+    return () => clearTimeout(t);
+  }, [connected]);
+
+  const onDisconnect = useCallback(() => {
+    clearStoredHost();
+    window.location.reload();
+  }, []);
+
   return (
     <div className={wrapperClass} style={{ background: "#020208" }}>
       <div className={`relative z-10${fullHeight ? " flex-shrink-0" : ""}`}>
@@ -213,6 +228,30 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
 
       {/* Floating action buttons — top right */}
       <FloatingButtons />
+
+      {/* Self-healing banner — stale remote host */}
+      {stale && (
+        <div className="fixed top-0 inset-x-0 z-[9999] flex justify-center pt-3 px-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-lg max-w-2xl" style={{ background: "rgba(20,5,5,0.92)", border: "1px solid rgba(239,68,68,0.4)" }}>
+            <span className="text-lg">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-xs" style={{ color: "#fca5a5" }}>
+                Can't reach <span className="font-bold">{activeHost}</span>
+              </p>
+              <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
+                Host unreachable from this network. Disconnect to pick another, or check the LAN.
+              </p>
+            </div>
+            <button
+              onClick={onDisconnect}
+              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:brightness-125 active:scale-95"
+              style={{ background: "rgba(239,68,68,0.2)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.4)" }}
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Connection lost overlay */}
       {reconnecting && (
