@@ -1,4 +1,6 @@
-import { memo, useState, useEffect, useRef, useCallback } from "react";
+import { memo, useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+
+const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
 
 const JARVIS_API = "/api/jarvis";
 
@@ -44,7 +46,9 @@ export const JarvisView = memo(function JarvisView() {
   const [patterns, setPatterns] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"chat" | "analytics" | "epos">("chat");
+  const [tab, setTab] = useState<"chat" | "analytics" | "epos" | "mycelium">("chat");
+  const [myceliumTarget, setMyceliumTarget] = useState(() => localStorage.getItem("jarvis-mycelium-target") || "01-oracles:0");
+  const [myceliumInput, setMyceliumInput] = useState(myceliumTarget);
   const [botEnabled, setBotEnabled] = useState(true);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -120,8 +124,8 @@ export const JarvisView = memo(function JarvisView() {
 
       {/* ── Tabs + Bot Toggle ── */}
       <div className="flex items-center gap-1 px-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-        {(["chat", "analytics", "epos"] as const).map(t => {
-          const cfg = { chat: { label: "Chat Feed", bg: "34,211,238" }, analytics: { label: "Analytics", bg: "168,85,247" }, epos: { label: "ePOS", bg: "251,191,36" } };
+        {(["chat", "analytics", "epos", "mycelium"] as const).map(t => {
+          const cfg = { chat: { label: "Chat Feed", bg: "34,211,238" }, analytics: { label: "Analytics", bg: "168,85,247" }, epos: { label: "ePOS", bg: "251,191,36" }, mycelium: { label: "🍄 Mycelium", bg: "163,230,53" } };
           const c = cfg[t];
           return (
             <button key={t} onClick={() => setTab(t)}
@@ -395,6 +399,56 @@ export const JarvisView = memo(function JarvisView() {
               <br />Endpoints: /epos/status, /epos/alerts, /epos/followups
             </div>
           </Panel>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════
+           MYCELIUM TAB — PTY chat over /ws/pty (mirrors maw-mycelium extension)
+         ═══════════════════════════════════ */}
+      {tab === "mycelium" && (
+        <div className="flex-1 flex flex-col gap-2" style={{ minHeight: 400 }}>
+          <div className="flex items-center gap-2 px-1">
+            <label className="text-[10px] text-white/40 font-mono uppercase tracking-wider">Target</label>
+            <input
+              type="text"
+              value={myceliumInput}
+              onChange={e => setMyceliumInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  setMyceliumTarget(myceliumInput);
+                  localStorage.setItem("jarvis-mycelium-target", myceliumInput);
+                }
+              }}
+              placeholder="e.g. 01-oracles:0"
+              className="flex-1 px-2 py-1 text-xs font-mono bg-white/5 border border-white/10 rounded text-white/80 focus:outline-none focus:border-lime-400/40"
+            />
+            <button
+              onClick={() => { setMyceliumTarget(myceliumInput); localStorage.setItem("jarvis-mycelium-target", myceliumInput); }}
+              className="px-3 py-1 text-xs font-medium rounded transition-all"
+              style={{ background: "rgba(163,230,53,0.15)", color: "rgb(163,230,53)", border: "1px solid rgba(163,230,53,0.3)" }}
+            >
+              Attach
+            </button>
+          </div>
+          <div className="flex-1 rounded-lg overflow-hidden border border-white/10" style={{ background: "#0a0a0f", minHeight: 360 }}>
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full text-white/30 text-sm font-mono">
+                Loading mycelium PTY...
+              </div>
+            }>
+              <XTerminal
+                key={myceliumTarget}
+                target={myceliumTarget}
+                onClose={() => {}}
+                onNavigate={() => {}}
+                siblings={[]}
+                onSelectSibling={() => {}}
+              />
+            </Suspense>
+          </div>
+          <div className="text-[10px] text-white/30 font-mono px-1">
+            🍄 Mycelium chat — xterm.js over /ws/pty. Enter target name + press Enter or Attach.
+          </div>
         </div>
       )}
     </div>
