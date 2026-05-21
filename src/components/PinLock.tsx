@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/api";
 
 const STORAGE_KEY = "office-unlocked";
 
@@ -14,7 +14,7 @@ export function PinLock({ children }: { children: React.ReactNode }) {
   // Fetch PIN config from server
   useEffect(() => {
     if (unlocked) return;
-    fetch(apiUrl("/api/pin-info"))
+    apiFetch("/api/pin-info")
       .then(r => r.json())
       .then(data => {
         setPinLength(data.length || 4);
@@ -34,7 +34,7 @@ export function PinLock({ children }: { children: React.ReactNode }) {
       const next = [...prev, d];
       if (next.length === pinLength) {
         // Verify server-side
-        fetch(apiUrl("/api/pin-verify"), {
+        apiFetch("/api/pin-verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ pin: next.join("") }),
