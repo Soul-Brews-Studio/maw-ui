@@ -46,7 +46,7 @@ export const JarvisView = memo(function JarvisView() {
   const [patterns, setPatterns] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"chat" | "analytics" | "epos" | "mycelium">("chat");
+  const [tab, setTab] = useState<"chat" | "analytics" | "mycelium">("chat");
   const [myceliumTarget, setMyceliumTarget] = useState(() => localStorage.getItem("jarvis-mycelium-target") || "01-oracles:0");
   const [myceliumInput, setMyceliumInput] = useState(myceliumTarget);
   const [botEnabled, setBotEnabled] = useState(true);
@@ -124,8 +124,8 @@ export const JarvisView = memo(function JarvisView() {
 
       {/* ── Tabs + Bot Toggle ── */}
       <div className="flex items-center gap-1 px-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-        {(["chat", "analytics", "epos", "mycelium"] as const).map(t => {
-          const cfg = { chat: { label: "Chat Feed", bg: "34,211,238" }, analytics: { label: "Analytics", bg: "168,85,247" }, epos: { label: "ePOS", bg: "251,191,36" }, mycelium: { label: "🍄 Mycelium", bg: "163,230,53" } };
+        {(["chat", "analytics", "mycelium"] as const).map(t => {
+          const cfg = { chat: { label: "Chat Feed", bg: "34,211,238" }, analytics: { label: "Analytics", bg: "168,85,247" }, mycelium: { label: "🍄 Mycelium", bg: "163,230,53" } };
           const c = cfg[t];
           return (
             <button key={t} onClick={() => setTab(t)}
@@ -385,20 +385,6 @@ export const JarvisView = memo(function JarvisView() {
               KB updated: {new Date(kbStats.last_update).toLocaleString("th-TH")} · Embed coverage: {kbStats.embed_coverage_pct ?? "?"}%
             </div>
           )}
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════
-           ePOS TAB
-         ═══════════════════════════════════ */}
-      {tab === "epos" && (
-        <div className="flex-1 flex flex-col gap-3" style={{ minHeight: 300 }}>
-          <Panel title="ePOS Pipeline Status">
-            <div className="text-xs text-white/40 font-mono">
-              ePOS data integration in progress — waiting for AIA-Oracle portal scrape API.
-              <br />Endpoints: /epos/status, /epos/alerts, /epos/followups
-            </div>
-          </Panel>
         </div>
       )}
 
