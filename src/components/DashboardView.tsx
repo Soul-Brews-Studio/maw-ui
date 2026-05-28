@@ -574,10 +574,10 @@ export const DashboardView = memo(function DashboardView({
         send={send}
       />
 
-      {/* Two-column: Tokens + Command Center */}
+      {/* Two-column: Command Center + Tokens */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TokenTracking />
         <CommandCenter agents={agents} send={send} />
+        <TokenTracking />
       </div>
 
       {/* Activity feed */}
