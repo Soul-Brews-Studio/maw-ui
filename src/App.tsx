@@ -29,6 +29,7 @@ import { LoadingSkeleton } from "./components/LoadingSkeleton";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
 import { JumpOverlay } from "./components/JumpOverlay";
 import { OracleSearch } from "./components/OracleSearch";
+import { useIsMobile } from "./hooks/useMediaQuery";
 import { unlockAudio, isAudioUnlocked, setSoundMuted, SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound } from "./lib/sounds";
 
 function FloatingButtons() {
@@ -284,7 +285,9 @@ export function App() {
 
   const rawRoute = useHashRoute();
   const { view: route, agentName: hashAgent } = parseHash(rawRoute);
+  const isMobile = useIsMobile();
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
+  const [hashTerminalTarget, setHashTerminalTarget] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showJump, setShowJump] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
@@ -354,8 +357,12 @@ export function App() {
     return agents.filter(a => !!a.source);
   }, [agents, sourceFilter]);
 
-  // Resolve hash agent name → AgentState once agents are loaded
-  // Also re-resolve when hashAgent changes (e.g. navigating between agents via URL)
+  // Resolve hash agent name → AgentState once agents are loaded.
+  // Re-resolve when hashAgent changes (e.g. navigating between agents via URL).
+  // On the desktop /#terminal route, pre-select the target in TerminalView's sidebar
+  // instead of opening the fullscreen TerminalModal — the modal has no desktop sidebar
+  // variant, so auto-opening it on a deep-link hides the desktop sidebar+main layout
+  // (Boss-flagged 2026-04-27 23:01: looked like "mobile layout on desktop").
   const lastResolvedAgent = useRef<string | null>(null);
   useEffect(() => {
     if (!hashAgent || agents.length === 0) return;
@@ -363,11 +370,14 @@ export function App() {
     if (lastResolvedAgent.current === hashAgent) return;
     const name = hashAgent.toLowerCase();
     const match = agents.find(a => a.name.toLowerCase() === name);
-    if (match) {
+    if (!match) return;
+    if (route === "terminal" && !isMobile) {
+      setHashTerminalTarget(match.target);
+    } else {
       setSelectedAgent(match);
-      lastResolvedAgent.current = hashAgent;
     }
-  }, [agents, hashAgent]);
+    lastResolvedAgent.current = hashAgent;
+  }, [agents, hashAgent, route, isMobile]);
 
   // Close terminal when hash loses the agent part (e.g. browser back).
   // Uses a ref guard to avoid racing with onSelectAgent: the hashchange
@@ -541,7 +551,7 @@ export function App() {
   if (route === "terminal") {
     return (
       <Layout activeView="terminal" {...layoutProps} fullHeight>
-        <TerminalView sessions={sessions} agents={agents} connected={connected} onSelectAgent={onSelectAgent} />
+        <TerminalView sessions={sessions} agents={agents} connected={connected} onSelectAgent={onSelectAgent} initialTarget={hashTerminalTarget} />
       </Layout>
     );
   }
