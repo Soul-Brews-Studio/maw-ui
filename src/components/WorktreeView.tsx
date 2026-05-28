@@ -97,9 +97,9 @@ export function WorktreeView() {
   return (
     <PageShell>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-xl font-semibold text-white">Worktree Hygiene</h1>
+          <h1 className="text-xl sm:text-2xl font-bold font-mono" style={{ color: "#e2e8f0" }}>Worktree Hygiene</h1>
           <p className="text-sm text-zinc-500 mt-1">
             {worktrees.length} worktrees &mdash;{" "}
             <span className="text-green-400">{activeCount} active</span>

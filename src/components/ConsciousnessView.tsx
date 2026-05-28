@@ -81,10 +81,10 @@ export function ConsciousnessView() {
   return (
     <PageShell maxWidth="1200px">
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h2 className="font-mono text-lg" style={{ color: "#a855f7" }}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold font-mono" style={{ color: "#a855f7" }}>
           🧠 Oracle Consciousness
-        </h2>
+        </h1>
         <p className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
           7-phase autonomous thinking — reflect → wonder → soul → dream → aspire → propose
         </p>
