@@ -2,6 +2,7 @@ import { useEffect, useCallback } from "react";
 import { useWebSocket } from "./useWebSocket";
 import { useMqtt } from "./useMqtt";
 import { apiUrl } from "../lib/api";
+import { cached } from "../lib/cache";
 import { useFederationStore } from "../components/federation/store";
 import { simulate } from "../components/federation/simulation";
 import type { AgentNode, AgentEdge, Particle } from "../components/federation/types";
@@ -64,7 +65,10 @@ export function useFederationData() {
       //   /api/feed?limit=200    — live event log (replaces the old /api/messages)
       //   /api/plugins           — optional, may 404 on stale pm2 (graceful degrade)
       const [config, fleetConfig, feed, pluginData] = await Promise.all([
-        fetch(apiUrl("/api/config")).then(r => r.json()).catch(() => null),
+        // Proof-of-use of the vendored SWR cache: /api/config is read-only and
+        // rarely changes → 60s fresh window, then stale-while-revalidate. Live
+        // updates still arrive via WebSocket, so no mutation path invalidates this.
+        cached("maw:config", 60_000, () => fetch(apiUrl("/api/config")).then(r => r.json()), { tag: "maw:federation" }).catch(() => null),
         fetch(apiUrl("/api/fleet-config")).then(r => r.json()).catch(() => null),
         fetch(apiUrl("/api/feed?limit=200")).then(r => r.json()).catch(() => null),
         fetch(apiUrl("/api/plugins")).then(r => r.json()).catch(() => null),
