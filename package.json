@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bunx vite",
     "build": "bunx vite build",
-    "preview": "bunx vite preview"
+    "preview": "bunx vite preview",
+    "test": "bun test src/lib/cache/__tests__"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
