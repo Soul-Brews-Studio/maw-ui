@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "bun test src/lib/cache/__tests__"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
