@@ -22,6 +22,7 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   const selectedTargetRef = useRef<string | null>(null);
   selectedTargetRef.current = selectedTarget;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputElRef = useRef<HTMLTextAreaElement>(null);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: "ok" | "warn" | "err" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,8 +69,19 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     setCaptureHtml("");
     setInputBuf("");
     setSendQueue([]);
-    termRef.current?.focus();
+    // Focus the real text field so a hardware OR mobile soft keyboard can type.
+    inputElRef.current?.focus();
   }, []);
+
+  // Window navigation shared by Alt+Arrow (desktop) and used by the input handler.
+  const gotoAdjacent = useCallback((dir: -1 | 1) => {
+    if (!selectedTargetRef.current) return;
+    const allWindows = sessions.flatMap(s => s.windows.map(w => ({ target: `${s.name}:${w.index}`, name: w.name })));
+    const idx = allWindows.findIndex(w => w.target === selectedTargetRef.current);
+    if (idx < 0) return;
+    const next = allWindows[(idx + dir + allWindows.length) % allWindows.length];
+    selectWindow(next.target);
+  }, [sessions, selectWindow]);
 
   // Flush send queue
   useEffect(() => {
@@ -128,69 +140,70 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     }
   }, [selectedTarget, selectedName, agents, queueSend, showToast]);
 
-  // Paste handler — fires on right-click paste or Ctrl+Shift+V
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData("text");
-    if (text) setInputBuf(b => b + text);
-  }, []);
-
-  // Keyboard handler
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  // Keyboard handler for the REAL textarea. Native typing/paste/IME (Thai!) is
+  // handled by the browser via onChange — we only intercept the control keys.
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Alt+Arrow to navigate between windows
     if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
       e.preventDefault();
-      if (!selectedTarget) return;
-      const allWindows = sessions.flatMap(s => s.windows.map(w => ({ target: `${s.name}:${w.index}`, name: w.name })));
-      const idx = allWindows.findIndex(w => w.target === selectedTarget);
-      if (idx < 0) return;
-      const dir = e.key === "ArrowLeft" ? -1 : 1;
-      const next = allWindows[(idx + dir + allWindows.length) % allWindows.length];
-      selectWindow(next.target);
+      gotoAdjacent(e.key === "ArrowLeft" ? -1 : 1);
       return;
     }
 
+    // IME composition in progress (Thai/CJK) — let the keystroke commit text,
+    // never treat Enter as "send" mid-composition.
+    if (e.nativeEvent.isComposing) return;
+
     if (!selectedTarget) return;
 
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
+      // Enter → send; Shift+Enter falls through to native newline insertion.
       e.preventDefault();
-      if (e.shiftKey) {
-        // Shift+Enter → newline in buffer
-        setInputBuf(b => b + "\n");
-      } else {
-        // Enter → send
-        if (inputBuf) { queueSend(inputBuf); setInputBuf(""); }
-      }
-    } else if (e.key === "Backspace") {
-      e.preventDefault();
-      if (e.metaKey || e.ctrlKey) setInputBuf("");
-      else setInputBuf(b => b.slice(0, -1));
+      if (inputBuf) { queueSend(inputBuf); setInputBuf(""); }
     } else if (e.key === "Escape") {
       e.preventDefault();
       setInputBuf(""); setSendQueue([]);
-    } else if (e.key === "c" && e.ctrlKey) {
-      e.preventDefault();
-      setInputBuf(""); setSendQueue([]);
-    } else if ((e.key === "v" && e.ctrlKey) || (e.key === "v" && e.metaKey)) {
-      // Ctrl+V / Cmd+V → paste from clipboard
-      e.preventDefault();
-      navigator.clipboard.readText().then(text => {
-        if (text) setInputBuf(b => b + text);
-      }).catch(() => {});
     } else if (e.key === "Tab") {
       e.preventDefault();
       queueSend(inputBuf + "\t");
       setInputBuf("");
-    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      setInputBuf(b => b + e.key);
     }
-  }, [selectedTarget, inputBuf, queueSend, selectWindow, sessions]);
+    // Backspace, Ctrl/Cmd+V paste, char entry, etc. — handled natively.
+  }, [selectedTarget, inputBuf, queueSend, gotoAdjacent]);
 
   return (
     <div className="flex flex-col sm:flex-row mx-4 sm:mx-6 mb-3 rounded-2xl overflow-hidden border border-white/[0.06]" style={{ height: "calc(100vh - 72px)" }}>
-      {/* Sidebar — full-width capped strip on mobile (stacks above the pane), fixed 220px column on sm+ */}
-      <div className="w-full sm:w-[220px] flex-shrink-0 flex flex-col max-h-[38vh] sm:max-h-none border-b sm:border-b-0 sm:border-r border-white/[0.06] overflow-y-auto" style={{ background: "#08080e" }}>
+      {/* Mobile oracle picker — a native dropdown replaces the long stacked fleet
+          list on phones, freeing vertical room for the terminal + input. The
+          OS-native <select> popover is the right mobile affordance. Desktop keeps
+          the full sidebar (hidden sm:flex below). */}
+      <div className="sm:hidden flex-shrink-0 border-b border-white/[0.06] px-3 py-2" style={{ background: "#08080e" }}>
+        <select
+          className="w-full bg-transparent text-[13px] font-mono text-white/90 outline-none border border-white/[0.1] rounded-lg px-2 py-1.5"
+          value={selectedTarget ?? ""}
+          onChange={(e) => { if (e.target.value) selectWindow(e.target.value); }}
+          style={{ background: "#0d0d14" }}
+        >
+          <option value="" disabled>เลือก Oracle…</option>
+          {sessions.map(session => (
+            <optgroup key={session.name} label={session.name}>
+              {session.windows.map(w => {
+                const target = `${session.name}:${w.index}`;
+                const agent = agents.find(a => a.target === target);
+                const dot = agent?.status === "busy" ? "🟠" : agent?.status === "ready" ? "🟢" : "⚫";
+                return (
+                  <option key={target} value={target}>
+                    {dot} {w.index} {w.name}
+                  </option>
+                );
+              })}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {/* Sidebar — fixed 220px column on sm+; hidden on mobile (dropdown above replaces it) */}
+      <div className="hidden sm:flex sm:w-[220px] flex-shrink-0 flex-col sm:max-h-none sm:border-r border-white/[0.06] overflow-y-auto" style={{ background: "#08080e" }}>
         {sessions.map(session => {
           const style = roomStyle(session.name);
           return (
@@ -234,10 +247,7 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
       <div
         ref={termRef}
         className="flex-1 flex flex-col min-w-0 min-h-0 outline-none relative"
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        onClick={() => termRef.current?.focus()}
+        onClick={() => inputElRef.current?.focus()}
       >
         {/* Attach toast — "sent to <target>" / warn / error */}
         {toast && (
@@ -306,10 +316,24 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
             {uploading ? "⏳" : "📎"}
           </span>
           <span className="text-white/30 mr-2 mt-[1px] flex-shrink-0">&gt;</span>
-          <span className="text-white/90 whitespace-pre flex-1">{inputBuf}</span>
-          <span
-            className="inline-block w-[7px] h-[15px] ml-[1px] flex-shrink-0"
-            style={{ background: selectedTarget ? "#89b4fa" : "#333", animation: "blink 1s step-end infinite", marginTop: "2px" }}
+          {/* Real focusable field — a hidden tabIndex div never raises the mobile
+              soft keyboard, so typing was impossible on phones. A textarea does,
+              and gets native Thai IME + paste for free. */}
+          <textarea
+            ref={inputElRef}
+            value={inputBuf}
+            rows={1}
+            disabled={!selectedTarget}
+            onChange={(e) => setInputBuf(e.target.value)}
+            onKeyDown={handleInputKeyDown}
+            placeholder={selectedTarget ? "พิมพ์ข้อความ… (Enter ส่ง, Shift+Enter ขึ้นบรรทัด)" : "เลือกหน้าต่างก่อน"}
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            enterKeyHint="send"
+            className="flex-1 min-w-0 bg-transparent outline-none border-0 resize-none text-white/90 font-mono text-[13px] leading-[1.35] placeholder:text-white/20 disabled:cursor-not-allowed"
+            style={{ caretColor: "#89b4fa", padding: 0, margin: 0 }}
           />
           {sendQueue.length > 0 && (
             <span className="text-white/30 text-[11px] ml-2">({sendQueue.length} queued)</span>
