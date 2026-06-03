@@ -46,7 +46,7 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/upload/api/file", { method: "POST", body: fd });
+      const res = await fetch("/upload/api/file", { method: "POST", credentials: "same-origin", body: fd });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success || !data?.saved?.length) {
         const reason = data?.errors?.[0]?.reason || `HTTP ${res.status}`;
