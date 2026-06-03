@@ -188,9 +188,9 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   }, [selectedTarget, inputBuf, queueSend, selectWindow, sessions]);
 
   return (
-    <div className="flex mx-4 sm:mx-6 mb-3 rounded-2xl overflow-hidden border border-white/[0.06]" style={{ height: "calc(100vh - 72px)" }}>
-      {/* Sidebar */}
-      <div className="w-[220px] flex-shrink-0 flex flex-col border-r border-white/[0.06] overflow-y-auto" style={{ background: "#08080e" }}>
+    <div className="flex flex-col sm:flex-row mx-4 sm:mx-6 mb-3 rounded-2xl overflow-hidden border border-white/[0.06]" style={{ height: "calc(100vh - 72px)" }}>
+      {/* Sidebar — full-width capped strip on mobile (stacks above the pane), fixed 220px column on sm+ */}
+      <div className="w-full sm:w-[220px] flex-shrink-0 flex flex-col max-h-[38vh] sm:max-h-none border-b sm:border-b-0 sm:border-r border-white/[0.06] overflow-y-auto" style={{ background: "#08080e" }}>
         {sessions.map(session => {
           const style = roomStyle(session.name);
           return (
@@ -233,7 +233,7 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
       {/* Terminal pane */}
       <div
         ref={termRef}
-        className="flex-1 flex flex-col min-w-0 outline-none relative"
+        className="flex-1 flex flex-col min-w-0 min-h-0 outline-none relative"
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
