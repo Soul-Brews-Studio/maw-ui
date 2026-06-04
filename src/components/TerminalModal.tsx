@@ -26,6 +26,8 @@ const STATUS_DOT: Record<string, string> = {
 export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSibling, siblings }: TerminalModalProps) {
   const xtermRef = useRef<XTerminalHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputElRef = useRef<HTMLTextAreaElement>(null);
+  const [inputBuf, setInputBuf] = useState("");
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: "ok" | "warn" | "err" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,6 +65,26 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
       setUploading(false);
     }
   }, [agent.name, showToast]);
+
+  // Mobile-reachable composer. The dashboard pane embeds raw xterm.js, whose
+  // internal helper-textarea never raises the soft keyboard on phones — so
+  // typing was impossible here even after TerminalView (#terminal) got its own
+  // real textarea. A real <textarea> raises the keyboard and gives native Thai
+  // IME + paste for free; we submit the line through the SAME PTY inject path
+  // the 📎 attach uses (`\r` = xterm sends CR on Enter, runs the line).
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // IME composition in progress (Thai/CJK) — let the keystroke commit text,
+    // never treat Enter as "send" mid-composition.
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === "Enter" && !e.shiftKey) {
+      // Enter → send; Shift+Enter falls through to native newline insertion.
+      e.preventDefault();
+      if (inputBuf) {
+        xtermRef.current?.inject(inputBuf + "\r");
+        setInputBuf("");
+      }
+    }
+  }, [inputBuf]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0f]">
@@ -155,6 +177,39 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
               onSelectSibling={onSelectSibling}
             />
           </Suspense>
+        </div>
+
+        {/* Input line — real focusable textarea so the mobile soft keyboard
+            opens on the dashboard pane (xterm.js alone never raises it). Mirrors
+            TerminalView's composer but routes through the PTY inject path. */}
+        <div
+          className="flex items-start px-3 py-1.5 border-t border-white/[0.06] font-mono text-[13px] min-h-[36px] shrink-0"
+          style={{ background: "#0d0d14" }}
+        >
+          <span className="text-white/30 mr-2 mt-[1px] flex-shrink-0">&gt;</span>
+          <textarea
+            ref={inputElRef}
+            value={inputBuf}
+            rows={1}
+            onChange={(e) => setInputBuf(e.target.value)}
+            onKeyDown={handleInputKeyDown}
+            placeholder={`พิมพ์ถึง ${cleanName(agent.name)}… (Enter ส่ง, Shift+Enter ขึ้นบรรทัด)`}
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            enterKeyHint="send"
+            className="flex-1 min-w-0 bg-transparent outline-none border-0 resize-none text-white/90 font-mono text-[13px] leading-[1.35] placeholder:text-white/20"
+            style={{ caretColor: "#89b4fa", padding: 0, margin: 0 }}
+          />
+          {inputBuf && (
+            <span
+              className="ml-auto text-white/30 text-[11px] cursor-pointer hover:text-red-400 px-2 rounded"
+              onClick={() => setInputBuf("")}
+            >
+              esc
+            </span>
+          )}
         </div>
       </div>
 
