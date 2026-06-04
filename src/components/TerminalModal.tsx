@@ -1,6 +1,5 @@
 import { lazy, Suspense, useRef, useState, useCallback } from "react";
 import type { AgentState } from "../lib/types";
-import type { XTerminalHandle } from "./XTerminal";
 
 const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
 
@@ -24,7 +23,6 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSibling, siblings }: TerminalModalProps) {
-  const xtermRef = useRef<XTerminalHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputElRef = useRef<HTMLTextAreaElement>(null);
   const [inputBuf, setInputBuf] = useState("");
@@ -38,11 +36,15 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
-  // 📎 attach: upload an image to labubu-upload, then inject its saved path into
-  // the running Oracle PTY (same path-injection contract as TerminalView, but
-  // delivered through xterm's PTY socket instead of the capture-stream queue).
-  // The modal only opens for a tracked agent (claude pane), so the target is
-  // always a valid Oracle — no isClaudeWindow guard needed.
+  // 📎 attach: upload an image to labubu-upload, then deliver its saved path to
+  // the running Oracle session. Routes through the SAME shared-dashboard-WS
+  // `send` command TerminalView uses ({type:"send", force:true}) — NOT the xterm
+  // PTY attach socket. The dashboard pane is a *grouped* tmux session whose PTY
+  // attach is display-oriented: the server streams output but drops injected
+  // input (same reason it ignores resize on grouped sessions), so xterm.inject()
+  // clears the field without ever reaching the session. Trailing `\n` submits,
+  // mirroring TerminalView's attach. The modal only opens for a tracked agent
+  // (claude pane), so the target is always a valid Oracle — no guard needed.
   const uploadAttachment = useCallback(async (file: File) => {
     setUploading(true);
     try {
@@ -56,35 +58,38 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
         return;
       }
       const path: string = data.saved[0].path;
-      // `\r` submits — xterm sends CR on Enter, so this types the line and runs it.
-      xtermRef.current?.inject(`[ภาพแนบ — โปรดดู: ${path}]\r`);
+      send({ type: "send", target: agent.target, text: `[ภาพแนบ — โปรดดู: ${path}]\n`, force: true });
       showToast(`ส่งภาพไปที่ ${agent.name} แล้ว`, "ok");
     } catch {
       showToast("อัปโหลดล้มเหลว (network)", "err");
     } finally {
       setUploading(false);
     }
-  }, [agent.name, showToast]);
+  }, [agent.name, agent.target, send, showToast]);
 
   // Mobile-reachable composer. The dashboard pane embeds raw xterm.js, whose
   // internal helper-textarea never raises the soft keyboard on phones — so
   // typing was impossible here even after TerminalView (#terminal) got its own
   // real textarea. A real <textarea> raises the keyboard and gives native Thai
-  // IME + paste for free; we submit the line through the SAME PTY inject path
-  // the 📎 attach uses (`\r` = xterm sends CR on Enter, runs the line).
+  // IME + paste for free; we deliver the line through the SAME shared-dashboard
+  // `send` command TerminalView uses ({type:"send", force:true}) — the xterm PTY
+  // attach socket drops injected input on grouped sessions, which cleared the
+  // field without delivering. The server-side `send` handler submits the line.
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
     // IME composition in progress (Thai/CJK) — let the keystroke commit text,
-    // never treat Enter as "send" mid-composition.
+    // never treat Enter as "send" mid-composition. (Identical to TerminalView's
+    // working composer; Boss's clear-without-send symptom is the dropped PTY
+    // input path above, not this guard — text clears only when Enter passes it.)
     if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       // Enter → send; Shift+Enter falls through to native newline insertion.
       e.preventDefault();
       if (inputBuf) {
-        xtermRef.current?.inject(inputBuf + "\r");
+        send({ type: "send", target: agent.target, text: inputBuf, force: true });
         setInputBuf("");
       }
     }
-  }, [inputBuf]);
+  }, [inputBuf, agent.target, send]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0f]">
@@ -169,7 +174,6 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
             </div>
           }>
             <XTerminal
-              ref={xtermRef}
               target={agent.target}
               onClose={onClose}
               onNavigate={onNavigate}
