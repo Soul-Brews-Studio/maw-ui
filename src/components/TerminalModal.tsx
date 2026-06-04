@@ -75,6 +75,19 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
   // `send` command TerminalView uses ({type:"send", force:true}) — the xterm PTY
   // attach socket drops injected input on grouped sessions, which cleared the
   // field without delivering. The server-side `send` handler submits the line.
+  // Accept-suggestion = the same accept-completion as desktop Tab in
+  // TerminalView: forward the typed buffer + a literal Tab to the PTY (via the
+  // shared `send` path that actually reaches this grouped session) so the claude
+  // TUI tab-completes / accepts its ghost suggestion. Accept-only — no trailing
+  // \r — so it mirrors desktop Tab and does NOT auto-submit. The dashboard pane
+  // had no React Tab handler at all before, so this also brings the focused
+  // Oracle pane to parity. The sm:hidden ⇥ button is the mobile trigger (no Tab
+  // key on phone keyboards).
+  const acceptSuggestion = useCallback(() => {
+    send({ type: "send", target: agent.target, text: inputBuf + "\t", force: true });
+    setInputBuf("");
+  }, [inputBuf, agent.target, send]);
+
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
     // IME composition in progress (Thai/CJK) — let the keystroke commit text,
     // never treat Enter as "send" mid-composition. (Identical to TerminalView's
@@ -88,8 +101,14 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
         send({ type: "send", target: agent.target, text: inputBuf, force: true });
         setInputBuf("");
       }
+    } else if (e.key === "Tab") {
+      // Mirror TerminalView's desktop Tab: forward typed text + a literal Tab so
+      // the claude TUI tab-completes / accepts its ghost suggestion. Accept-only
+      // (no \r) — matches desktop, does NOT auto-submit.
+      e.preventDefault();
+      acceptSuggestion();
     }
-  }, [inputBuf, agent.target, send]);
+  }, [inputBuf, agent.target, send, acceptSuggestion]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0f]">
@@ -206,6 +225,19 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
             className="flex-1 min-w-0 bg-transparent outline-none border-0 resize-none text-white/90 font-mono text-[13px] leading-[1.35] placeholder:text-white/20"
             style={{ caretColor: "#89b4fa", padding: 0, margin: 0 }}
           />
+          {/* Mobile ⇥ accept-suggestion — mirrors desktop Tab (sends typed text +
+              literal Tab to the PTY → claude TUI completes). sm:hidden = mobile
+              only; phones have no Tab key. The ghost lives in the TUI not React,
+              so it's always enabled rather than gated on a suggestion existing. */}
+          <button
+            type="button"
+            className="sm:hidden flex-shrink-0 ml-2 px-2 py-0.5 rounded text-[12px] font-mono text-purple-300/90 border border-purple-300/25 hover:bg-purple-300/10 active:scale-95 transition-all"
+            title="รับคำแนะนำ (เหมือนกด Tab บนคีย์บอร์ด)"
+            onMouseDown={(e) => e.preventDefault()}  // keep textarea focus
+            onClick={acceptSuggestion}
+          >
+            ⇥ รับ
+          </button>
           {inputBuf && (
             <span
               className="ml-auto text-white/30 text-[11px] cursor-pointer hover:text-red-400 px-2 rounded"

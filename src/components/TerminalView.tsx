@@ -140,6 +140,18 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     }
   }, [selectedTarget, selectedName, agents, queueSend, showToast]);
 
+  // Accept-suggestion = exactly what desktop Tab does: forward the typed buffer
+  // PLUS a literal Tab to the PTY, so the claude TUI running in the captured pane
+  // tab-completes / accepts its own ghost suggestion. Desktop Tab is ACCEPT-ONLY
+  // (no trailing \r) — it does NOT auto-submit; the user presses Enter after. We
+  // mirror that precisely. Mobile soft keyboards have no Tab key, so the
+  // sm:hidden ⇥ button below is the only way to trigger this on a phone.
+  const acceptSuggestion = useCallback(() => {
+    if (!selectedTarget) return;
+    queueSend(inputBuf + "\t");
+    setInputBuf("");
+  }, [selectedTarget, inputBuf, queueSend]);
+
   // Keyboard handler for the REAL textarea. Native typing/paste/IME (Thai!) is
   // handled by the browser via onChange — we only intercept the control keys.
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -165,11 +177,10 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
       setInputBuf(""); setSendQueue([]);
     } else if (e.key === "Tab") {
       e.preventDefault();
-      queueSend(inputBuf + "\t");
-      setInputBuf("");
+      acceptSuggestion();
     }
     // Backspace, Ctrl/Cmd+V paste, char entry, etc. — handled natively.
-  }, [selectedTarget, inputBuf, queueSend, gotoAdjacent]);
+  }, [selectedTarget, inputBuf, queueSend, gotoAdjacent, acceptSuggestion]);
 
   return (
     <div className="flex flex-col sm:flex-row mx-4 sm:mx-6 mb-3 rounded-2xl overflow-hidden border border-white/[0.06]" style={{ height: "calc(100vh - 72px)" }}>
@@ -335,6 +346,23 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
             className="flex-1 min-w-0 bg-transparent outline-none border-0 resize-none text-white/90 font-mono text-[13px] leading-[1.35] placeholder:text-white/20 disabled:cursor-not-allowed"
             style={{ caretColor: "#89b4fa", padding: 0, margin: 0 }}
           />
+          {/* Mobile ⇥ accept-suggestion — phones have no Tab key, so this button
+              is the only way to fire the same accept-completion as desktop Tab
+              (sends typed text + literal Tab to the PTY → claude TUI completes).
+              sm:hidden = mobile-only, like the oracle dropdown above. Enabled
+              whenever a window is selected (matches when desktop Tab does
+              anything); the ghost lives in the TUI, not React, so we can't gate
+              on "a suggestion currently exists". */}
+          <button
+            type="button"
+            className="sm:hidden flex-shrink-0 ml-2 px-2 py-0.5 rounded text-[12px] font-mono text-purple-300/90 border border-purple-300/25 hover:bg-purple-300/10 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
+            title="รับคำแนะนำ (เหมือนกด Tab บนคีย์บอร์ด)"
+            disabled={!selectedTarget}
+            onMouseDown={(e) => e.preventDefault()}  // keep textarea focus
+            onClick={acceptSuggestion}
+          >
+            ⇥ รับ
+          </button>
           {sendQueue.length > 0 && (
             <span className="text-white/30 text-[11px] ml-2">({sendQueue.length} queued)</span>
           )}
