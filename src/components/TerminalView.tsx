@@ -143,12 +143,22 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   // Accept-suggestion = exactly what desktop Tab does: forward the typed buffer
   // PLUS a literal Tab to the PTY, so the claude TUI running in the captured pane
   // tab-completes / accepts its own ghost suggestion. Desktop Tab is ACCEPT-ONLY
-  // (no trailing \r) — it does NOT auto-submit; the user presses Enter after. We
-  // mirror that precisely. Mobile soft keyboards have no Tab key, so the
-  // sm:hidden ⇥ button below is the only way to trigger this on a phone.
+  // (no trailing \r) — it does NOT auto-submit; the user presses Enter after. The
+  // desktop Tab keydown below uses this handler and keeps that accept-only shape.
   const acceptSuggestion = useCallback(() => {
     if (!selectedTarget) return;
     queueSend(inputBuf + "\t");
+    setInputBuf("");
+  }, [selectedTarget, inputBuf, queueSend]);
+
+  // Mobile ⇥ button = accept + submit in ONE tap (DIVERGES from desktop Tab by
+  // design — Boss 2026-06-04: "suggestion ขึ้นมาแล้วส่งให้ oracle ได้เลย"). It
+  // forwards the typed buffer + a literal Tab + a carriage return (\t\r), so the
+  // claude TUI accepts its ghost suggestion AND submits the line, since phones
+  // have no convenient way to then press Enter. Desktop Tab stays accept-only.
+  const acceptSuggestionAndSubmit = useCallback(() => {
+    if (!selectedTarget) return;
+    queueSend(inputBuf + "\t\r");
     setInputBuf("");
   }, [selectedTarget, inputBuf, queueSend]);
 
@@ -347,19 +357,20 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
             style={{ caretColor: "#89b4fa", padding: 0, margin: 0 }}
           />
           {/* Mobile ⇥ accept-suggestion — phones have no Tab key, so this button
-              is the only way to fire the same accept-completion as desktop Tab
-              (sends typed text + literal Tab to the PTY → claude TUI completes).
-              sm:hidden = mobile-only, like the oracle dropdown above. Enabled
-              whenever a window is selected (matches when desktop Tab does
-              anything); the ghost lives in the TUI, not React, so we can't gate
-              on "a suggestion currently exists". */}
+              is the only way to accept the claude TUI's ghost suggestion on a
+              phone. Unlike desktop Tab (accept-only), this button accepts AND
+              submits in one tap (sends typed text + literal Tab + \r → TUI
+              completes then submits) — Boss 2026-06-04 intent. sm:hidden =
+              mobile-only, like the oracle dropdown above. Enabled whenever a
+              window is selected; the ghost lives in the TUI, not React, so we
+              can't gate on "a suggestion currently exists". */}
           <button
             type="button"
             className="sm:hidden flex-shrink-0 ml-2 px-2 py-0.5 rounded text-[12px] font-mono text-purple-300/90 border border-purple-300/25 hover:bg-purple-300/10 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
-            title="รับคำแนะนำ (เหมือนกด Tab บนคีย์บอร์ด)"
+            title="รับคำแนะนำแล้วส่งเลย (เหมือนกด Tab แล้ว Enter)"
             disabled={!selectedTarget}
             onMouseDown={(e) => e.preventDefault()}  // keep textarea focus
-            onClick={acceptSuggestion}
+            onClick={acceptSuggestionAndSubmit}
           >
             ⇥ รับ
           </button>

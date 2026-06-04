@@ -81,10 +81,19 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
   // TUI tab-completes / accepts its ghost suggestion. Accept-only — no trailing
   // \r — so it mirrors desktop Tab and does NOT auto-submit. The dashboard pane
   // had no React Tab handler at all before, so this also brings the focused
-  // Oracle pane to parity. The sm:hidden ⇥ button is the mobile trigger (no Tab
-  // key on phone keyboards).
+  // Oracle pane to parity. Used by the desktop Tab keydown below.
   const acceptSuggestion = useCallback(() => {
     send({ type: "send", target: agent.target, text: inputBuf + "\t", force: true });
+    setInputBuf("");
+  }, [inputBuf, agent.target, send]);
+
+  // Mobile ⇥ button = accept + submit in ONE tap (DIVERGES from desktop Tab by
+  // design — Boss 2026-06-04: "suggestion ขึ้นมาแล้วส่งให้ oracle ได้เลย").
+  // Forwards typed buffer + literal Tab + carriage return (\t\r) so the claude
+  // TUI accepts its ghost suggestion AND submits, since phones have no easy way
+  // to then press Enter. Desktop Tab keydown stays accept-only (\t).
+  const acceptSuggestionAndSubmit = useCallback(() => {
+    send({ type: "send", target: agent.target, text: inputBuf + "\t\r", force: true });
     setInputBuf("");
   }, [inputBuf, agent.target, send]);
 
@@ -225,16 +234,18 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
             className="flex-1 min-w-0 bg-transparent outline-none border-0 resize-none text-white/90 font-mono text-[13px] leading-[1.35] placeholder:text-white/20"
             style={{ caretColor: "#89b4fa", padding: 0, margin: 0 }}
           />
-          {/* Mobile ⇥ accept-suggestion — mirrors desktop Tab (sends typed text +
-              literal Tab to the PTY → claude TUI completes). sm:hidden = mobile
-              only; phones have no Tab key. The ghost lives in the TUI not React,
-              so it's always enabled rather than gated on a suggestion existing. */}
+          {/* Mobile ⇥ accept-suggestion — accepts the claude TUI ghost AND submits
+              in one tap (sends typed text + literal Tab + \r → TUI completes then
+              submits). DIVERGES from desktop Tab (accept-only) by Boss 2026-06-04
+              intent. sm:hidden = mobile only; phones have no Tab key. The ghost
+              lives in the TUI not React, so it's always enabled rather than gated
+              on a suggestion existing. */}
           <button
             type="button"
             className="sm:hidden flex-shrink-0 ml-2 px-2 py-0.5 rounded text-[12px] font-mono text-purple-300/90 border border-purple-300/25 hover:bg-purple-300/10 active:scale-95 transition-all"
-            title="รับคำแนะนำ (เหมือนกด Tab บนคีย์บอร์ด)"
+            title="รับคำแนะนำแล้วส่งเลย (เหมือนกด Tab แล้ว Enter)"
             onMouseDown={(e) => e.preventDefault()}  // keep textarea focus
-            onClick={acceptSuggestion}
+            onClick={acceptSuggestionAndSubmit}
           >
             ⇥ รับ
           </button>
