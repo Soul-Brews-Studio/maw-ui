@@ -2,6 +2,7 @@ import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { ansiToHtml } from "../lib/ansi";
 import { roomStyle } from "../lib/constants";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { TerminalKeyBar } from "./TerminalKeyBar";
 import type { Session, AgentState } from "../lib/types";
 
 interface TerminalViewProps {
@@ -306,6 +307,13 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
             </div>
           )}
         </div>
+
+        {/* Mobile control-key bar — same raw-key PTY path as the composer, for
+            driving interactive claude TUIs the soft keyboard can't reach. Keys
+            send immediately (no queue) so arrow navigation feels responsive. */}
+        <TerminalKeyBar
+          onKey={(seq) => { if (selectedTarget) wsSend({ type: "send", target: selectedTarget, text: seq, force: true }); }}
+        />
 
         {/* Input line */}
         <div

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useRef, useState, useCallback } from "react";
 import type { AgentState } from "../lib/types";
+import { TerminalKeyBar } from "./TerminalKeyBar";
 
 const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
 
@@ -210,6 +211,14 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
             />
           </Suspense>
         </div>
+
+        {/* Mobile control-key bar — tap ↑↓←→ Enter Tab Esc Space Ctrl-C to drive
+            interactive claude TUIs (multi-selects) that the soft keyboard can't.
+            Routes raw key sequences through the SAME `send` PTY path as the
+            composer; server `sendKeys` maps them to tmux key names. */}
+        <TerminalKeyBar
+          onKey={(seq) => send({ type: "send", target: agent.target, text: seq, force: true })}
+        />
 
         {/* Input line — real focusable textarea so the mobile soft keyboard
             opens on the dashboard pane (xterm.js alone never raises it). Mirrors
