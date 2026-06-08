@@ -119,16 +119,24 @@ function flushWrite() {
   }).catch(() => {}); // fire-and-forget
 }
 
+let lastSyncTime = 0;
+const SYNC_INTERVAL = 5_000;
+
 /** Sync server state into localStorage, then rehydrate Zustand. */
 function syncFromServer(name: string) {
+  const now = Date.now();
+  if (now - lastSyncTime < SYNC_INTERVAL) return;
+  lastSyncTime = now;
   apiFetch("/api/ui-state").then(async (res) => {
     if (!res.ok) return;
     const data = await res.json();
     if (!data || Object.keys(data).length === 0) return;
-    const value = JSON.stringify({ state: data, version: 2 });
+    const serverState = JSON.stringify(data);
     const existing = localStorage.getItem(name);
-    if (value !== existing) {
-      localStorage.setItem(name, value);
+    const existingState = existing ? (() => { try { return JSON.stringify(JSON.parse(existing).state); } catch { return null; } })() : null;
+    if (serverState !== existingState) {
+      const ver = existing ? (() => { try { return JSON.parse(existing).version; } catch { return 3; } })() : 3;
+      localStorage.setItem(name, JSON.stringify({ state: data, version: ver }));
       useFleetStore.persist.rehydrate();
     }
   }).catch(() => {});
