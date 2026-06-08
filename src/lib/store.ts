@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
-import { apiUrl } from "./api";
+import { apiFetch } from "./api";
 
 export interface RecentEntry {
   name: string;
@@ -112,23 +112,31 @@ function flushWrite() {
   if (pendingWrite === null) return;
   const body = pendingWrite;
   pendingWrite = null;
-  fetch(apiUrl(`/api/ui-state`), {
+  apiFetch(`/api/ui-state`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body,
   }).catch(() => {}); // fire-and-forget
 }
 
+let lastSyncTime = 0;
+const SYNC_INTERVAL = 5_000;
+
 /** Sync server state into localStorage, then rehydrate Zustand. */
 function syncFromServer(name: string) {
-  fetch(apiUrl("/api/ui-state")).then(async (res) => {
+  const now = Date.now();
+  if (now - lastSyncTime < SYNC_INTERVAL) return;
+  lastSyncTime = now;
+  apiFetch("/api/ui-state").then(async (res) => {
     if (!res.ok) return;
     const data = await res.json();
     if (!data || Object.keys(data).length === 0) return;
-    const value = JSON.stringify({ state: data, version: 2 });
+    const serverState = JSON.stringify(data);
     const existing = localStorage.getItem(name);
-    if (value !== existing) {
-      localStorage.setItem(name, value);
+    const existingState = existing ? (() => { try { return JSON.stringify(JSON.parse(existing).state); } catch { return null; } })() : null;
+    if (serverState !== existingState) {
+      const ver = existing ? (() => { try { return JSON.parse(existing).version; } catch { return 3; } })() : 3;
+      localStorage.setItem(name, JSON.stringify({ state: data, version: ver }));
       useFleetStore.persist.rehydrate();
     }
   }).catch(() => {});
@@ -154,7 +162,7 @@ const hybridStorage: StateStorage = {
   },
   removeItem: (name) => {
     localStorage.removeItem(name);
-    fetch(apiUrl(`/api/ui-state`), {
+    apiFetch(`/api/ui-state`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
@@ -167,7 +175,7 @@ let askSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function persistAsks(asks: AskItem[]) {
   if (askSaveTimer) clearTimeout(askSaveTimer);
   askSaveTimer = setTimeout(() => {
-    fetch(apiUrl(`/api/asks`), {
+    apiFetch(`/api/asks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(asks),
@@ -361,7 +369,7 @@ export const useFleetStore = create<FleetStore>()(
 
 // Load asks from server on startup
 setTimeout(() => {
-  fetch(apiUrl("/api/asks"))
+  apiFetch("/api/asks")
     .then((r) => r.json())
     .then((data: AskItem[]) => {
       if (Array.isArray(data) && data.length > 0) {

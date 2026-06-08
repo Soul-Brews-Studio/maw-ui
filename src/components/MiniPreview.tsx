@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { ansiToHtml, processCapture } from "../lib/ansi";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/api";
 
 interface MiniPreviewProps {
   agent: { target: string; name: string; status: string };
@@ -23,7 +23,7 @@ export const MiniPreview = memo(function MiniPreview({ agent, accent, roomLabel 
 
   useEffect(() => {
     let active = true;
-    fetch(apiUrl(`/api/capture?target=${encodeURIComponent(agent.target)}`))
+    apiFetch(`/api/capture?target=${encodeURIComponent(agent.target)}`)
       .then(r => r.json())
       .then(d => { if (active) setContent(d.content || ""); })
       .catch(() => {});
