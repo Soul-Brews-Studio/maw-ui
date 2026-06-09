@@ -281,8 +281,8 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   }, [voiceActive, showToast]);
 
   // File picker handler — validates client-side, spawns instant preview via blob URL,
-  // then fires background POST /api/upload per file (multipart; field "file"). On success swaps
-  // to server URL and stores `path` for prepend-on-send. Phase 2 wiring.
+  // then fires background POST /upload/api/file per file (labubu-upload; multipart, field
+  // "file"). On success stores the returned `path` for prepend-on-send. Phase 2 wiring.
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     const ALLOWED = /^image\/(png|jpeg|jpg|webp|heic|heif)$/i;
@@ -298,14 +298,17 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     next.forEach(att => {
       const fd = new FormData();
       fd.append("file", att.file);
-      fetch("/api/upload", { method: "POST", body: fd })
+      fetch("/upload/api/file", { method: "POST", body: fd })
         .then(async r => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json() as Promise<{ id: string; url: string; path: string }>;
+          const data = await r.json().catch(() => null);
+          if (!r.ok || !data?.success || !data?.saved?.length) {
+            throw new Error(data?.errors?.[0]?.reason || `HTTP ${r.status}`);
+          }
+          return data.saved[0] as { path: string; url?: string };
         })
-        .then(json => {
+        .then(saved => {
           setAttachments(prev => prev.map(x =>
-            x.id === att.id ? { ...x, status: "done", path: json.path, serverUrl: json.url } : x
+            x.id === att.id ? { ...x, status: "done", path: saved.path, serverUrl: saved.url } : x
           ));
         })
         .catch(err => {
