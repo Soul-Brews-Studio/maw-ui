@@ -6,12 +6,16 @@ import pkg from "./package.json";
 
 const MAW_HTTP = process.env.VITE_MAW_URL ?? "http://localhost:3456";
 const MAW_WS = MAW_HTTP.replace(/^http/, "ws");
+const MAW_BUILD = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" });
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   define: {
     __MAW_VERSION__: JSON.stringify(pkg.version),
-    __MAW_BUILD__: JSON.stringify(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" })),
+    __MAW_BUILD__: JSON.stringify(MAW_BUILD),
+    // Consumed by the vendored cache layer (src/lib/cache) to version-bust entries.
+    // version+build → busts on every deploy, not just on a package version bump.
+    __APP_VERSION__: JSON.stringify(`${pkg.version}+${MAW_BUILD}`),
   },
   root: ".",
   base: "/",
