@@ -11,18 +11,30 @@ import { useFleetStore, RECENT_TTL_MS, type RecentEntry } from "../lib/store";
 import type { AgentState, Session, AgentEvent } from "../lib/types";
 import { describeActivity, type FeedEvent } from "../lib/feed";
 import type { Team } from "./TeamPanel";
+import { apiUrl } from "../lib/api";
 
 export type FeedLogEntry = { text: string; ts: number; project?: string; eventType?: string };
 
+type BroadcastOutcome = "delivered" | "queued" | "rejected" | "error";
+type BroadcastResult = { name: string; target: string; outcome: BroadcastOutcome; detail?: string };
+
 /** Fleet-specific controls for StatusBar — reads from Zustand, takes agents for counts */
-export function BroadcastModal({ agents, send, onClose }: { agents: AgentState[]; send: (msg: object) => void; onClose: () => void }) {
+export function BroadcastModal({ agents, onClose }: { agents: AgentState[]; onClose: () => void }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [results, setResults] = useState<BroadcastResult[]>([]);
+  const [includeBusy, setIncludeBusy] = useState(false);
+  const [force, setForce] = useState(false);
   const recRef = useRef<any>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const activeAgents = agents.filter(a => a.name !== "live" && a.name !== "zsh");
+  const activeAgents = useMemo(() => agents.filter(a => a.name !== "live" && a.name !== "zsh"), [agents]);
+  const targetAgents = useMemo(
+    () => includeBusy ? activeAgents : activeAgents.filter(a => a.status === "ready"),
+    [activeAgents, includeBusy],
+  );
+  const skippedCount = activeAgents.length - targetAgents.length;
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -59,16 +71,52 @@ export function BroadcastModal({ agents, send, onClose }: { agents: AgentState[]
     else { setInterim(""); rec.start(); setListening(true); }
   };
 
-  const handleSend = () => {
-    if (!text.trim()) return;
+  const handleSend = async () => {
+    const body = text.trim();
+    if (!body || sending || targetAgents.length === 0) return;
     if (recRef.current && listening) { recRef.current.stop(); setListening(false); }
-    for (const a of activeAgents) {
-      send({ type: "send", target: a.target, text: text.trim() });
-      setTimeout(() => send({ type: "send", target: a.target, text: "\r" }), 50);
-    }
-    setSent(true);
-    setTimeout(onClose, 600);
+    setSending(true);
+    // Pending placeholders so the strip appears immediately
+    setResults(targetAgents.map(a => ({ name: a.name, target: a.target, outcome: "queued" })));
+
+    const settled = await Promise.allSettled(
+      targetAgents.map(async (a): Promise<BroadcastResult> => {
+        try {
+          const resp = await fetch(apiUrl("/api/send"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target: a.target, text: body, force }),
+          });
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => "");
+            return { name: a.name, target: a.target, outcome: "rejected", detail: errText || `HTTP ${resp.status}` };
+          }
+          const json = (await resp.json().catch(() => ({}))) as { ok?: boolean; state?: BroadcastOutcome; error?: string };
+          if (json.ok === false) {
+            return { name: a.name, target: a.target, outcome: "rejected", detail: json.error || "rejected" };
+          }
+          // `state` is optional — Pulse will add it; treat missing as delivered.
+          const state = json.state ?? "delivered";
+          return { name: a.name, target: a.target, outcome: state, detail: json.error };
+        } catch (e: any) {
+          return { name: a.name, target: a.target, outcome: "error", detail: e?.message || "network error" };
+        }
+      }),
+    );
+
+    setResults(settled.map((s, i) =>
+      s.status === "fulfilled"
+        ? s.value
+        : { name: targetAgents[i].name, target: targetAgents[i].target, outcome: "error", detail: String(s.reason) },
+    ));
+    setSending(false);
   };
+
+  const reset = () => { setResults([]); setText(""); };
+  const allDelivered = results.length > 0 && results.every(r => r.outcome === "delivered");
+  const summary = results.length > 0
+    ? `${results.filter(r => r.outcome === "delivered").length}/${results.length} delivered`
+    : null;
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} onClick={onClose}>
@@ -76,7 +124,10 @@ export function BroadcastModal({ agents, send, onClose }: { agents: AgentState[]
         <div className="flex items-center gap-3">
           <span className="text-3xl">📢</span>
           <span className="text-lg font-bold text-amber-400">Broadcast</span>
-          <span className="text-xs text-white/30 font-mono">{activeAgents.length} agents</span>
+          <span className="text-xs text-white/30 font-mono">
+            {targetAgents.length}/{activeAgents.length} agents
+            {skippedCount > 0 && <span className="text-white/20"> · {skippedCount} skipped</span>}
+          </span>
           <button onClick={toggleMic} className="w-10 h-10 rounded-full flex items-center justify-center ml-2 cursor-pointer" style={{ background: listening ? "rgba(239,68,68,0.25)" : "rgba(74,222,128,0.15)" }}>
             {listening ? "🔴" : "🎤"}
           </button>
@@ -87,14 +138,71 @@ export function BroadcastModal({ agents, send, onClose }: { agents: AgentState[]
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } if (e.key === "Escape") onClose(); }}
           placeholder={listening ? "Speaking..." : "Message all agents..."}
           autoFocus inputMode="text" enterKeyHint="send"
+          disabled={sending}
           rows={4} className="w-full px-5 py-4 rounded-2xl text-lg text-white/90 outline-none resize-none"
           style={{ background: listening ? "rgba(239,68,68,0.05)" : "rgba(255,255,255,0.04)", border: listening ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(255,255,255,0.08)" }} />
+
+        {/* Options */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+          <label className="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer select-none">
+            <input type="checkbox" className="cursor-pointer" checked={includeBusy} onChange={e => setIncludeBusy(e.target.checked)} disabled={sending} />
+            Include busy/idle agents (queues message)
+          </label>
+          <label className="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer select-none">
+            <input type="checkbox" className="cursor-pointer" checked={force} onChange={e => setForce(e.target.checked)} disabled={sending} />
+            Override idle guard (force)
+          </label>
+        </div>
+
+        {/* Outcome strip */}
+        {results.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-1 text-[11px] font-mono">
+            {results.map(r => {
+              const color = r.outcome === "delivered" ? "#4ade80"
+                : r.outcome === "queued" ? "#fbbf24"
+                : "#ef4444";
+              const icon = r.outcome === "delivered" ? "✓"
+                : r.outcome === "queued" ? "⏳"
+                : "✗";
+              return (
+                <span key={r.target} title={r.detail || r.outcome}
+                  className="px-2 py-1 rounded-md flex items-center gap-1.5"
+                  style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${color}33` }}>
+                  <span style={{ color }}>{icon}</span>
+                  <span className="text-white/70">{r.name}</span>
+                  {r.outcome !== "delivered" && (
+                    <span className="text-white/40">· {r.outcome}</span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-white/20">Enter = send · Shift+Enter = newline · Esc = close</span>
-          <button onClick={handleSend} disabled={!text.trim() || sent}
-            className="ml-auto px-6 py-3 rounded-xl font-semibold cursor-pointer"
-            style={{ background: sent ? "rgba(74,222,128,0.15)" : text.trim() ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.03)", color: sent ? "#4ade80" : text.trim() ? "#fbbf24" : "rgba(255,255,255,0.15)", border: sent ? "1px solid rgba(74,222,128,0.3)" : "1px solid rgba(251,191,36,0.2)" }}>
-            {sent ? "✓ Sent!" : "📢 Broadcast"}
+          <span className="text-[10px] text-white/20">
+            {results.length > 0 ? "Esc = close" : "Enter = send · Shift+Enter = newline · Esc = close"}
+          </span>
+          {summary && (
+            <span className="text-[11px] font-mono" style={{ color: allDelivered ? "#4ade80" : "#fbbf24" }}>
+              {summary}
+            </span>
+          )}
+          {results.length > 0 && !sending && (
+            <button onClick={reset}
+              className="px-4 py-2 rounded-xl text-[12px] cursor-pointer"
+              style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              New
+            </button>
+          )}
+          <button onClick={handleSend} disabled={!text.trim() || sending || targetAgents.length === 0}
+            className="ml-auto px-6 py-3 rounded-xl font-semibold cursor-pointer disabled:cursor-not-allowed"
+            style={{
+              background: sending ? "rgba(251,191,36,0.08)" : text.trim() && targetAgents.length > 0 ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.03)",
+              color: sending ? "#fbbf24aa" : text.trim() && targetAgents.length > 0 ? "#fbbf24" : "rgba(255,255,255,0.15)",
+              border: "1px solid rgba(251,191,36,0.2)",
+            }}>
+            {sending ? "Sending..." : results.length > 0 ? "📢 Broadcast again" : "📢 Broadcast"}
           </button>
         </div>
       </div>
@@ -160,7 +268,7 @@ export function FleetControls({ agents, send }: { agents: AgentState[]; send: (m
           style={{ background: sortMode === "name" ? "rgba(255,255,255,0.08)" : "transparent", color: sortMode === "name" ? "#E2E8F0" : "#64748B" }}
           onClick={() => setSortMode("name")}>Room</button>
       </div>
-      {showBroadcast && <BroadcastModal agents={agents} send={send} onClose={() => setShowBroadcast(false)} />}
+      {showBroadcast && <BroadcastModal agents={agents} onClose={() => setShowBroadcast(false)} />}
     </>
   );
 }
