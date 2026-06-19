@@ -1,0 +1,7 @@
+data/
+**/origin
+*.db
+*.sqlite
+*.sqlite3
+dist/
+screenshots/
