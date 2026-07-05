@@ -142,11 +142,18 @@ function syncFromServer(name: string) {
   }).catch(() => {});
 }
 
+let syncScheduled = false;
+
 const hybridStorage: StateStorage = {
   getItem: (name) => {
     // Return localStorage synchronously → instant hydration
-    // Then background-sync from server for cross-device updates
-    setTimeout(() => syncFromServer(name), 0);
+    // Then background-sync from server for cross-device updates (debounced:
+    // getItem() fires on every store read, so without this flag a single
+    // render cycle can queue hundreds of redundant setTimeout calls — #67)
+    if (!syncScheduled) {
+      syncScheduled = true;
+      setTimeout(() => { syncScheduled = false; syncFromServer(name); }, 0);
+    }
     return localStorage.getItem(name);
   },
   setItem: (name, value) => {
