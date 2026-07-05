@@ -6,7 +6,7 @@ export interface TeamMember {
   backendType: string | null;
   isActive: boolean | null;
   tmuxPaneId: string;
-  model: string;
+  model?: string;
   cwd?: string;
   agentType?: string;
   joinedAt?: number;
@@ -38,7 +38,8 @@ export const COLOR_MAP: Record<string, string> = {
   pink: "#f472b6",
 };
 
-function shortModel(raw: string): string {
+function shortModel(raw?: string): string {
+  if (!raw) return "–";
   const m = raw.replace(/\[.*\]$/, ""); // strip [1m] suffix
   if (m.includes("opus")) return "opus";
   if (m.includes("sonnet")) return "sonnet";
