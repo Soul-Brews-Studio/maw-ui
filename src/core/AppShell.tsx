@@ -3,7 +3,7 @@
  * Provides: WebSocket connection, StatusBar, error boundary, PIN lock.
  * Each app mounts its view inside this shell.
  */
-import { type ReactNode, useCallback, useState, useEffect } from "react";
+import { type ReactNode, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useSessions } from "../hooks/useSessions";
 import { useFleetStore } from "../lib/store";
@@ -81,6 +81,13 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
             />
           </div>
           {children(ctx)}
+          <div
+            className="fixed bottom-1 right-2 z-[9999] font-mono pointer-events-none select-none"
+            style={{ fontSize: 9, color: "rgba(255,255,255,0.25)" }}
+            title={`v${__MAW_VERSION__} · ${__MAW_COMMIT__} · built ${__MAW_BUILD__}`}
+          >
+            {__MAW_COMMIT__} · {__MAW_BUILD__}
+          </div>
           {reconnecting && (
             <div className="fixed inset-0 z-[9998] flex items-center justify-center pointer-events-none">
               <div className="pointer-events-auto text-center px-8 py-6 rounded-2xl backdrop-blur-xl" style={{ background: "rgba(0,0,0,0.85)", border: "1px solid rgba(239,68,68,0.3)" }}>
