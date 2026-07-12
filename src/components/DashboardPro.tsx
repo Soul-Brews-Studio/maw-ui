@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiUrl, isRemote } from "../lib/api";
+import { isVisible } from "../lib/visibility";
 import { useWebSocket } from "../hooks/useWebSocket";
 
 // Read-only mode: hide mutation controls when viewing remotely (hosted HTTPS).
@@ -97,7 +98,7 @@ function useDashboardData() {
   useEffect(() => {
     refresh();
     // Poll federation/plugins/sessions every 30s (less frequent — feed is live via WS now)
-    const iv = setInterval(refresh, 30_000);
+    const iv = setInterval(() => { if (isVisible()) refresh(); }, 30_000);
     return () => clearInterval(iv);
   }, [refresh]);
 

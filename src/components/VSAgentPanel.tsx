@@ -2,7 +2,7 @@ import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 import { agentColor } from "../lib/constants";
 import { ansiToHtml, processCapture } from "../lib/ansi";
-import { apiFetch } from "../lib/api";
+import { subscribeCapture } from "../lib/capturePoller";
 import type { AgentState } from "../lib/types";
 
 interface VSAgentPanelProps {
@@ -18,20 +18,14 @@ export const VSAgentPanel = memo(function VSAgentPanel({ agent, send, onPickAgen
   const inputRef = useRef<HTMLInputElement>(null);
   const isFirstContent = useRef(true);
 
-  // Poll terminal content
+  // Poll terminal content — shared scheduler at 1s (was a dedicated 300ms
+  // setInterval; the single focused panel doesn't need sub-second HTTP polls)
   useEffect(() => {
     if (!agent) return;
     setContent("");
     isFirstContent.current = true;
     send({ type: "subscribe", target: agent.target });
-    const poll = setInterval(async () => {
-      try {
-        const res = await apiFetch(`/api/capture?target=${encodeURIComponent(agent.target)}`);
-        const data = await res.json();
-        setContent(data.content || "");
-      } catch {}
-    }, 300);
-    return () => clearInterval(poll);
+    return subscribeCapture(agent.target, setContent, 1000);
   }, [agent?.target, send]);
 
   // Auto-scroll

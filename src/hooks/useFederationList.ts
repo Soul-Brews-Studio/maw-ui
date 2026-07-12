@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiUrl } from "../lib/api";
+import { isVisible } from "../lib/visibility";
 import type {
   FederationConfig,
   FederationStatus,
@@ -94,7 +95,7 @@ export function useFederationList(): UseFederationList {
   // Poll peer status
   useEffect(() => {
     if (!available) return;
-    const id = setInterval(fetchStatus, POLL_INTERVAL);
+    const id = setInterval(() => { if (isVisible()) fetchStatus(); }, POLL_INTERVAL);
     return () => clearInterval(id);
   }, [available, fetchStatus]);
 

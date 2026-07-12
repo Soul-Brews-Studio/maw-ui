@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { ansiToHtml, processCapture } from "../lib/ansi";
 import { agentColor, PREVIEW_CARD } from "../lib/constants";
-import { apiFetch } from "../lib/api";
+import { subscribeCapture } from "../lib/capturePoller";
 import { useAgentPreview } from "../lib/previewStore";
 import type { AgentState, AgentEvent } from "../lib/types";
 
@@ -133,12 +133,11 @@ export const HoverPreviewCard = memo(function HoverPreviewCard({
       return;
     }
 
-    // In streaming mode: send new chars
+    // In streaming mode: send new chars as ONE message per input event —
+    // the per-char loop turned a paste into a WS message per character,
+    // each a server-side tmux send-keys
     if (streamingRef.current && val.length > prev.length) {
-      const newChars = val.slice(prev.length);
-      for (const ch of newChars) {
-        send({ type: "send", target: agent.target, text: ch });
-      }
+      send({ type: "send", target: agent.target, text: val.slice(prev.length) });
     }
 
     // Left streaming mode (user cleared or removed /)
@@ -147,22 +146,12 @@ export const HoverPreviewCard = memo(function HoverPreviewCard({
     }
   }, [agent.target, send]);
 
-  // Poll terminal capture
+  // Poll terminal capture — shared scheduler (dedupes with any tile already
+  // watching the same target)
   useEffect(() => {
-    let active = true;
-    async function poll() {
-      try {
-        const res = await apiFetch(`/api/capture?target=${encodeURIComponent(agent.target)}`);
-        const data = await res.json();
-        if (active) setContent(prev => {
-          const next = data.content || "";
-          return next === prev ? prev : next;
-        });
-      } catch {}
-      if (active) setTimeout(poll, 2000);
-    }
-    poll();
-    return () => { active = false; };
+    return subscribeCapture(agent.target, (next) => {
+      setContent(prev => (next === prev ? prev : next));
+    });
   }, [agent.target]);
 
   // Track near-bottom in BOTH pinned and hover modes — previously the scroll

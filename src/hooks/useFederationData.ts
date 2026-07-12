@@ -2,6 +2,7 @@ import { useEffect, useCallback } from "react";
 import { useWebSocket } from "./useWebSocket";
 import { useMqtt } from "./useMqtt";
 import { apiUrl } from "../lib/api";
+import { isVisible } from "../lib/visibility";
 import { useFederationStore } from "../components/federation/store";
 import { simulate } from "../components/federation/simulation";
 import type { AgentNode, AgentEdge, Particle } from "../components/federation/types";
@@ -207,7 +208,7 @@ export function useFederationData() {
     }
 
     load();
-    const iv = setInterval(load, 60_000);
+    const iv = setInterval(() => { if (isVisible()) load(); }, 60_000);
     return () => clearInterval(iv);
   }, [setGraph, setNode]);
 

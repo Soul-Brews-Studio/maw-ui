@@ -109,6 +109,7 @@ const RECENT_TTL = 30 * 60 * 1000; // 30 minutes
 
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingWrite: string | null = null;
+let lastServerWrite: string | null = null;
 
 function flushWrite() {
   if (pendingWrite === null) return;
@@ -126,6 +127,8 @@ const SYNC_INTERVAL = 5_000;
 
 /** Sync server state into localStorage, then rehydrate Zustand. */
 function syncFromServer(name: string) {
+  // Hidden tabs don't need cross-device updates — resync on return
+  if (typeof document !== "undefined" && document.hidden) return;
   const now = Date.now();
   if (now - lastSyncTime < SYNC_INTERVAL) return;
   lastSyncTime = now;
@@ -133,12 +136,15 @@ function syncFromServer(name: string) {
     if (!res.ok) return;
     const data = await res.json();
     if (!data || Object.keys(data).length === 0) return;
-    const serverState = JSON.stringify(data);
     const existing = localStorage.getItem(name);
-    const existingState = existing ? (() => { try { return JSON.stringify(JSON.parse(existing).state); } catch { return null; } })() : null;
-    if (serverState !== existingState) {
-      const ver = existing ? (() => { try { return JSON.parse(existing).version; } catch { return 3; } })() : 3;
-      localStorage.setItem(name, JSON.stringify({ state: data, version: ver }));
+    const parsed = existing ? (() => { try { return JSON.parse(existing); } catch { return null; } })() : null;
+    // recentMap is localStorage-only (never POSTed) — compare and merge
+    // without it, or every sync would look like a diff and wipe it
+    const { recentMap: localRecent, ...localState } = parsed?.state ?? {};
+    const { recentMap: _serverRecent, ...serverState } = data;
+    if (JSON.stringify(serverState) !== JSON.stringify(localState)) {
+      const ver = parsed?.version ?? 3;
+      localStorage.setItem(name, JSON.stringify({ state: { ...serverState, recentMap: localRecent }, version: ver }));
       useFleetStore.persist.rehydrate();
     }
   }).catch(() => {});
@@ -161,10 +167,18 @@ const hybridStorage: StateStorage = {
   setItem: (name, value) => {
     // Write to localStorage immediately (instant on next refresh)
     localStorage.setItem(name, value);
-    // Debounced write to server (cross-device sync)
+    // Debounced write to server (cross-device sync). recentMap churns on
+    // every feed event, which kept this debounce permanently hot (1 POST/s
+    // per tab on a busy fleet) — compare/send the state WITHOUT recentMap
+    // and skip the POST when nothing else changed. recentMap stays
+    // localStorage-only.
     try {
       const { state } = JSON.parse(value);
-      pendingWrite = JSON.stringify(state);
+      const { recentMap: _recentMap, ...serverState } = state;
+      const body = JSON.stringify(serverState);
+      if (body === lastServerWrite) return;
+      lastServerWrite = body;
+      pendingWrite = body;
       if (writeTimer) clearTimeout(writeTimer);
       writeTimer = setTimeout(flushWrite, 1000);
     } catch {}

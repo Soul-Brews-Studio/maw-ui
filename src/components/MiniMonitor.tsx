@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef } from "react";
 import { ansiToHtml, processCapture } from "../lib/ansi";
-import { apiFetch } from "../lib/api";
+import { subscribeCapture, fetchCaptureOnce } from "../lib/capturePoller";
 
 interface MiniMonitorProps {
   target: string;
@@ -39,11 +39,11 @@ export const MiniMonitor = memo(function MiniMonitor({
   const [hovered, setHovered] = useState(false);
 
   // Poll only when server says busy or user is hovering
-  // busy → 0.5s fast stream
-  // hovered → 1s
+  // busy → 1s via shared scheduler (backs off automatically if static)
+  // hovered → 1.5s
   // idle → no polling, frozen frame
   const shouldPoll = busy || hovered;
-  const pollInterval = busy ? 500 : 1000;
+  const pollInterval = busy ? 1000 : 1500;
 
   // When busy stops, immediately transition activity down
   useEffect(() => {
@@ -56,46 +56,32 @@ export const MiniMonitor = memo(function MiniMonitor({
 
   useEffect(() => {
     if (!shouldPoll) return;
-
-    let active = true;
-    async function poll() {
-      try {
-        const res = await apiFetch(`/api/capture?target=${encodeURIComponent(target)}`);
-        const data = await res.json();
-        const text = data.content || "";
-        if (!active) return;
-
-        const hash = quickHash(text);
-        if (prevHashRef.current !== 0 && hash !== prevHashRef.current) {
-          // Content actually changing — only show active if server agrees busy
-          setActivity(busy ? "active" : "stale");
-          staleCountRef.current = 0;
-        } else if (prevHashRef.current !== 0) {
-          staleCountRef.current++;
-          if (staleCountRef.current >= 3) {
-            setActivity("idle");
-          } else {
-            setActivity("stale");
-          }
+    return subscribeCapture(target, (text) => {
+      const hash = quickHash(text);
+      if (prevHashRef.current !== 0 && hash !== prevHashRef.current) {
+        // Content actually changing — only show active if server agrees busy
+        setActivity(busy ? "active" : "stale");
+        staleCountRef.current = 0;
+      } else if (prevHashRef.current !== 0) {
+        staleCountRef.current++;
+        if (staleCountRef.current >= 3) {
+          setActivity("idle");
+        } else {
+          setActivity("stale");
         }
-        prevHashRef.current = hash;
-        setContent(text);
-      } catch {}
-      if (active) setTimeout(poll, pollInterval);
-    }
-    poll();
-    return () => { active = false; };
+      }
+      prevHashRef.current = hash;
+      setContent(text);
+    }, pollInterval);
   }, [target, shouldPoll, pollInterval, busy]);
 
-  // Fetch one frame on mount so idle agents aren't blank
+  // Fetch one frame on mount so idle agents aren't blank (reuses shared cache)
   const mountedRef = useRef(false);
   useEffect(() => {
     if (mountedRef.current) return;
     mountedRef.current = true;
-    apiFetch(`/api/capture?target=${encodeURIComponent(target)}`)
-      .then(r => r.json())
-      .then(data => {
-        const text = data.content || "";
+    fetchCaptureOnce(target)
+      .then(text => {
         prevHashRef.current = quickHash(text);
         setContent(text);
       })

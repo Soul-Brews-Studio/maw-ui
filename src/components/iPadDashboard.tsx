@@ -5,6 +5,9 @@ import { useFleetStore } from "../lib/store";
 import { agentColor } from "../lib/constants";
 import { ChibiPortrait } from "./ChibiPortrait";
 import { useFileAttach, FileInput, AttachmentChips } from "../hooks/useFileAttach";
+import { subscribeCapture } from "../lib/capturePoller";
+import { apiFetch } from "../lib/api";
+import { isVisible } from "../lib/visibility";
 import { useDevice } from "../hooks/useDevice";
 import { FULL_COMMANDS } from "../quickCommands";
 import type { AgentState, PaneStatus } from "../lib/types";
@@ -108,28 +111,19 @@ function TerminalPanel({ agent, send }: { agent: AgentState; send: (msg: object)
   const name = agent.name.replace(/-oracle$/i, "");
   const { uploading, attachments, inputRef: fileRef, pickFile, onFileChange, removeAttachment, clearAttachments, buildMessage, drag, onPaste } = useFileAttach();
 
-  // Poll capture
+  // Poll capture — shared scheduler (was a raw fetch() loop bypassing the
+  // apiFetch circuit breaker entirely)
   useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      try {
-        const res = await fetch(`/api/capture?target=${encodeURIComponent(agent.target)}`);
-        const data = await res.json();
-        if (active && data.content !== contentRef.current) {
-          contentRef.current = data.content || "";
-          const el = termRef.current;
-          if (el) {
-            // Simple ANSI strip for display
-            el.textContent = contentRef.current.replace(/\x1b\[[0-9;]*m/g, "");
-            requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
-          }
-        }
-      } catch {}
-      if (active) timer = setTimeout(poll, 1500);
-    }
-    poll();
-    return () => { active = false; clearTimeout(timer); };
+    return subscribeCapture(agent.target, (text) => {
+      if (text === contentRef.current) return;
+      contentRef.current = text;
+      const el = termRef.current;
+      if (el) {
+        // Simple ANSI strip for display
+        el.textContent = text.replace(/\x1b\[[0-9;]*m/g, "");
+        requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+      }
+    }, 1500);
   }, [agent.target]);
 
   const handleSend = useCallback(() => {
@@ -379,8 +373,9 @@ function InboxPanel({ send }: { send: (msg: object) => void }) {
 function LoopsPanel() {
   const [loops, setLoops] = useState<any[]>([]);
   useEffect(() => {
-    fetch("/api/loops").then(r => r.json()).then(d => setLoops(d.loops || [])).catch(() => {});
-    const t = setInterval(() => fetch("/api/loops").then(r => r.json()).then(d => setLoops(d.loops || [])).catch(() => {}), 30000);
+    const load = () => apiFetch("/api/loops").then(r => r.json()).then(d => setLoops(d.loops || [])).catch(() => {});
+    load();
+    const t = setInterval(() => { if (isVisible()) load(); }, 30000);
     return () => clearInterval(t);
   }, []);
 

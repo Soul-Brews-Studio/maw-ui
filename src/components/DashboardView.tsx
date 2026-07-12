@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { apiUrl } from "../lib/api";
+import { isVisible } from "../lib/visibility";
 import { agentColor, roomStyle, guessCommand } from "../lib/constants";
 import { AgentAvatar } from "./AgentAvatar";
 import { describeActivity, type FeedEvent } from "../lib/feed";
@@ -242,7 +243,7 @@ function TokenTracking() {
         .catch(() => setLoading(false));
     };
     fetchTokens();
-    const iv = setInterval(fetchTokens, 30_000);
+    const iv = setInterval(() => { if (isVisible()) fetchTokens(); }, 30_000);
     return () => clearInterval(iv);
   }, []);
 

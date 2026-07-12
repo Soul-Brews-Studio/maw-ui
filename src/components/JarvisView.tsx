@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { isVisible } from "../lib/visibility";
 
 const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
 
@@ -91,8 +92,8 @@ export const JarvisView = memo(function JarvisView() {
   useEffect(() => {
     fetchData();
     fetchAnalytics();
-    const i1 = setInterval(fetchData, 10000);
-    const i2 = setInterval(fetchAnalytics, 30000);
+    const i1 = setInterval(() => { if (isVisible()) fetchData(); }, 10000);
+    const i2 = setInterval(() => { if (isVisible()) fetchAnalytics(); }, 30000);
     return () => { clearInterval(i1); clearInterval(i2); };
   }, [fetchData, fetchAnalytics]);
 

@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from "react";
 import { ansiToHtml, processCapture } from "../lib/ansi";
 import { roomStyle, agentColor } from "../lib/constants";
-import { apiFetch } from "../lib/api";
+import { subscribeCapture } from "../lib/capturePoller";
 import { useFps } from "./FpsCounter";
 import { useFleetStore } from "../lib/store";
 import type { AgentState, Session } from "../lib/types";
@@ -46,7 +46,6 @@ const OverviewTile = memo(function OverviewTile({
   const [content, setContent] = useState("");
   const tileRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef(true);
 
   const displayName = agent.name.replace(/-oracle$/, "").replace(/-/g, " ");
   const isBusy = agent.status === "busy";
@@ -65,22 +64,11 @@ const OverviewTile = memo(function OverviewTile({
     return () => obs.disconnect();
   }, []);
 
-  // Poll capture when visible
+  // Poll capture when visible — via the shared scheduler (dedupes targets,
+  // caps global concurrency, backs off static panes, pauses on hidden tab)
   useEffect(() => {
     if (!visible) return;
-    activeRef.current = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      if (!activeRef.current) return;
-      try {
-        const res = await apiFetch(`/api/capture?target=${encodeURIComponent(agent.target)}`);
-        const data = await res.json();
-        if (activeRef.current) setContent(data.content || "");
-      } catch {}
-      if (activeRef.current) timer = setTimeout(poll, 2000);
-    }
-    poll();
-    return () => { activeRef.current = false; clearTimeout(timer); };
+    return subscribeCapture(agent.target, setContent);
   }, [agent.target, visible]);
 
   const trimmed = useMemo(() => processCapture(content), [content]);

@@ -28,12 +28,18 @@ export function PinLock({ children }: { children: React.ReactNode }) {
       .catch(() => { setEnabled(false); setUnlocked(true); setLoading(false); });
   }, [unlocked]);
 
+  // In-flight guard — OS key-repeat on a held digit key completes a PIN
+  // ~7x/sec, each firing a POST /api/pin-verify (4xx never trips the breaker)
+  const verifyingRef = useRef(false);
+
   const handleDigit = useCallback((d: string) => {
+    if (verifyingRef.current) return;
     setError(false);
     setDigits(prev => {
       const next = [...prev, d];
       if (next.length === pinLength) {
         // Verify server-side
+        verifyingRef.current = true;
         apiFetch("/api/pin-verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -45,14 +51,15 @@ export function PinLock({ children }: { children: React.ReactNode }) {
               localStorage.setItem(STORAGE_KEY, "1");
               window.location.hash = "mission";
               setUnlocked(true);
+              verifyingRef.current = false;
             } else {
               setError(true);
-              setTimeout(() => { setDigits([]); setError(false); }, 500);
+              setTimeout(() => { setDigits([]); setError(false); verifyingRef.current = false; }, 500);
             }
           })
           .catch(() => {
             setError(true);
-            setTimeout(() => { setDigits([]); setError(false); }, 500);
+            setTimeout(() => { setDigits([]); setError(false); verifyingRef.current = false; }, 500);
           });
       }
       return next.length > pinLength ? [] : next;

@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { isVisible } from "../lib/visibility";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -998,7 +999,7 @@ function App() {
     }
 
     load();
-    const iv = setInterval(load, 60_000);
+    const iv = setInterval(() => { if (isVisible()) load(); }, 60_000);
     return () => clearInterval(iv);
   }, []);
 

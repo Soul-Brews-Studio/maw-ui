@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { isVisible } from "../lib/visibility";
 
 interface LoopStatus {
   id: string;
@@ -92,12 +93,22 @@ export function LoopsView({ connected }: { connected: boolean }) {
       .catch(() => {});
   }, []);
 
+  // Ref so the 30s interval reads the current selection without re-arming
+  // (selectedLoop in the dep array remounted the interval on every card
+  // click, double-fetching each time)
+  const selectedLoopRef = useRef(selectedLoop);
+  selectedLoopRef.current = selectedLoop;
+
   useEffect(() => {
     fetchLoops();
     fetchHistory();
-    const interval = setInterval(() => { fetchLoops(); fetchHistory(selectedLoop || undefined); }, 30_000);
+    const interval = setInterval(() => {
+      if (!isVisible()) return;
+      fetchLoops();
+      fetchHistory(selectedLoopRef.current || undefined);
+    }, 30_000);
     return () => clearInterval(interval);
-  }, [fetchLoops, fetchHistory, selectedLoop]);
+  }, [fetchLoops, fetchHistory]);
 
   const toggleEngine = () => {
     const next = !engineEnabled;

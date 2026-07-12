@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef, type ReactNode } from "react";
 import { apiUrl, isRemote, activeHost } from "../lib/api";
+import { isVisible } from "../lib/visibility";
 import { SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound, type SoundProfile } from "../lib/sounds";
 
 function SoundButton({ muted, onToggleMute }: { muted: boolean; onToggleMute: () => void }) {
@@ -108,7 +109,7 @@ function useFleetTotal() {
         .catch(() => {});
     };
     fetch_();
-    const iv = setInterval(fetch_, 30000);
+    const iv = setInterval(() => { if (isVisible()) fetch_(); }, 30000);
     return () => clearInterval(iv);
   }, []);
   return { total };

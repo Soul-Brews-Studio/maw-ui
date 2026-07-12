@@ -208,8 +208,24 @@ function useVisibleTargets(send: (msg: object) => void) {
       },
       { rootMargin: "100px" }
     );
-    return () => { observerRef.current?.disconnect(); clearTimeout(debounceRef.current); };
-  }, [syncToServer]);
+    // IntersectionObserver still reports tiles as intersecting in hidden
+    // tabs, so backgrounded tabs held their server-push preview streams
+    // forever. Release them on hide, re-subscribe on return.
+    const onVis = () => {
+      if (document.hidden) {
+        clearTimeout(debounceRef.current);
+        send({ type: "subscribe-previews", targets: [] });
+      } else {
+        syncToServer();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      observerRef.current?.disconnect();
+      clearTimeout(debounceRef.current);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [syncToServer, send]);
 
   const observe = useCallback((el: HTMLElement | null, target: string) => {
     if (!el || !observerRef.current) return;
