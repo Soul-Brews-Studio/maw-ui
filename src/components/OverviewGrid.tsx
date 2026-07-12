@@ -12,6 +12,15 @@ function sessionNum(name: string): number {
   return m ? parseInt(m[1], 10) : -1;
 }
 
+/** Parse ghq-style cwd (…/github.com/<owner>/<repo>/…) → "owner/repo", or null.
+ *  Works regardless of ghq root (/opt/Code, ~/Code, …). */
+function repoFromCwd(cwd?: string): string | null {
+  const m = cwd?.match(/\/github\.com\/([^/]+)\/([^/]+)/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+const STUDIO_BASE = "https://studio.buildwithoracle.com";
+
 interface OverviewGridProps {
   sessions: Session[];
   agents: AgentState[];
@@ -115,6 +124,18 @@ const OverviewTile = memo(function OverviewTile({
           </kbd>
         )}
         <span className="text-[9px] font-mono text-white/25">{agent.session}</span>
+        {repoFromCwd(agent.cwd) && (
+          <a
+            href={`${STUDIO_BASE}/repo/${repoFromCwd(agent.cwd)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Vault docs — ${repoFromCwd(agent.cwd)}`}
+            className="text-[10px] leading-none opacity-40 hover:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            📚
+          </a>
+        )}
         <span
           className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded"
           style={{
