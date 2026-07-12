@@ -109,13 +109,23 @@ export function subscribeCapture(target: string, listener: Listener, baseMs = 20
 }
 
 /**
- * One-shot frame (hover previews, mount snapshots). Reuses a recent shared
- * frame when available instead of issuing a new request.
+ * One-shot frame (hover previews, mount snapshots, idle-tile freeze frames).
+ * Reuses a recent shared frame when available; otherwise queues through the
+ * scheduler — so 60 tiles mounting at once drain through the concurrency cap
+ * instead of firing 60 simultaneous requests.
  */
 export function fetchCaptureOnce(target: string, maxAgeMs = 3000): Promise<string> {
   const e = entries.get(target);
   if (e && e.last && Date.now() - e.lastFetched < maxAgeMs) return Promise.resolve(e.last);
-  return apiFetch(`/api/capture?target=${encodeURIComponent(target)}`)
-    .then((r) => r.json())
-    .then((d) => d.content || "");
+  return new Promise((resolve) => {
+    let settled = false;
+    const stop = subscribeCapture(target, (text) => {
+      if (settled) return;
+      settled = true;
+      resolve(text);
+      // listener can fire synchronously inside subscribeCapture, before
+      // `stop` is assigned — defer the unsubscribe one microtask
+      queueMicrotask(() => stop());
+    });
+  });
 }

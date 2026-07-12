@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef, useMemo } from "react";
 import { ansiToHtml, processCapture } from "../lib/ansi";
 import { roomStyle, agentColor } from "../lib/constants";
-import { subscribeCapture } from "../lib/capturePoller";
+import { subscribeCapture, fetchCaptureOnce } from "../lib/capturePoller";
 import { useFps } from "./FpsCounter";
 import { useFleetStore } from "../lib/store";
 import type { AgentState, Session } from "../lib/types";
@@ -64,12 +64,20 @@ const OverviewTile = memo(function OverviewTile({
     return () => obs.disconnect();
   }, []);
 
-  // Poll capture when visible — via the shared scheduler (dedupes targets,
-  // caps global concurrency, backs off static panes, pauses on hidden tab)
+  // Capture frames via the shared scheduler (dedupes targets, caps global
+  // concurrency, backs off static panes, pauses on hidden tab).
+  // Busy agents stream; idle/ready agents get ONE frame and freeze — their
+  // pane isn't changing, and the WS feed flips isBusy when they wake, which
+  // re-runs this effect and resumes streaming.
   useEffect(() => {
     if (!visible) return;
-    return subscribeCapture(agent.target, setContent);
-  }, [agent.target, visible]);
+    if (isBusy) return subscribeCapture(agent.target, setContent);
+    let active = true;
+    fetchCaptureOnce(agent.target)
+      .then((text) => { if (active) setContent(text); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [agent.target, visible, isBusy]);
 
   const trimmed = useMemo(() => processCapture(content), [content]);
 
