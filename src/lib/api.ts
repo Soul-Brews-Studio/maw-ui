@@ -196,9 +196,12 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   // Chrome PNA: opt the request into the local-network address space when the
   // active host is private. Older Chromes ignore the option; newer ones use it
   // to drive the permission prompt instead of a hard block.
-  const finalInit: RequestInit & { targetAddressSpace?: "local" | "private" } = { ...init };
+  const finalInit: RequestInit & { targetAddressSpace?: "loopback" | "local" | "private" } = { ...init };
   if (isPrivateHost()) {
-    finalInit.targetAddressSpace = "local";
+    const r = resolveHost();
+    const h = r?.host.split(":")[0].toLowerCase() ?? "";
+    finalInit.targetAddressSpace =
+      h === "localhost" || h === "127.0.0.1" ? "loopback" : "local";
   }
 
   try {
