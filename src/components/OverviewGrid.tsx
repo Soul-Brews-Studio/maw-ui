@@ -35,11 +35,13 @@ const OverviewTile = memo(function OverviewTile({
   accent,
   shortcutKey,
   onClick,
+  compact,
 }: {
   agent: AgentState;
   accent: string;
   shortcutKey?: number;
   onClick: () => void;
+  compact?: boolean;
 }) {
   const [content, setContent] = useState("");
   const tileRef = useRef<HTMLDivElement>(null);
@@ -102,7 +104,7 @@ const OverviewTile = memo(function OverviewTile({
     >
       {/* Header */}
       <div
-        className="flex items-center gap-2.5 px-3 py-2"
+        className={compact ? "flex items-center gap-1.5 px-2 py-1" : "flex items-center gap-2.5 px-3 py-2"}
         style={{ background: `${accent}08`, borderBottom: `1px solid ${accent}15` }}
       >
         <span
@@ -113,18 +115,18 @@ const OverviewTile = memo(function OverviewTile({
           }}
         />
         <span
-          className="text-xs font-bold tracking-[1px] truncate"
+          className={compact ? "text-[10px] font-bold truncate" : "text-xs font-bold tracking-[1px] truncate"}
           style={{ color: accent }}
         >
           {displayName}
         </span>
-        {shortcutKey != null && (
+        {!compact && shortcutKey != null && (
           <kbd className="text-[9px] font-mono px-1 py-0.5 rounded" style={{ background: `${accent}15`, color: `${accent}60` }}>
             {shortcutKey}
           </kbd>
         )}
-        <span className="text-[9px] font-mono text-white/25">{agent.session}</span>
-        {repoFromCwd(agent.cwd) && (
+        {!compact && <span className="text-[9px] font-mono text-white/25">{agent.session}</span>}
+        {!compact && repoFromCwd(agent.cwd) && (
           <a
             href={`${STUDIO_BASE}/repo/${repoFromCwd(agent.cwd)}`}
             target="_blank"
@@ -137,7 +139,7 @@ const OverviewTile = memo(function OverviewTile({
           </a>
         )}
         <span
-          className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded"
+          className={compact ? "ml-auto text-[8px] font-mono px-1 rounded" : "ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded"}
           style={{
             background: isBusy ? "#ffa72618" : agent.status === "ready" ? "#22C55E14" : "rgba(255,255,255,0.04)",
             color: statusColor,
@@ -150,8 +152,8 @@ const OverviewTile = memo(function OverviewTile({
       {/* Terminal content */}
       <div
         ref={termRef}
-        className="flex-1 px-2 py-1.5 overflow-y-auto overflow-x-hidden font-mono text-[9px] leading-[1.35] text-[#cdd6f4] whitespace-pre-wrap break-all [overflow-wrap:anywhere]"
-        style={{ background: "#08080c", minHeight: 180, maxHeight: 300 }}
+        className={`flex-1 px-2 py-1.5 overflow-y-auto overflow-x-hidden font-mono leading-[1.35] text-[#cdd6f4] whitespace-pre-wrap break-all [overflow-wrap:anywhere] ${compact ? "text-[7px]" : "text-[9px]"}`}
+        style={{ background: "#08080c", minHeight: compact ? 60 : 180, maxHeight: compact ? 110 : 300 }}
         dangerouslySetInnerHTML={{ __html: ansiToHtml(trimmed) }}
       />
     </div>
@@ -168,6 +170,9 @@ export const OverviewGrid = memo(function OverviewGrid({
   const fps = useFps();
 
   const grouped = useFleetStore((s) => s.grouped);
+  const density = useFleetStore((s) => s.density);
+  const toggleDensity = useFleetStore((s) => s.toggleDensity);
+  const compact = density === "compact";
   const busyCount = agents.filter(a => a.status === "busy").length;
   const readyCount = agents.filter(a => a.status === "ready").length;
   const idleCount = agents.length - busyCount - readyCount;
@@ -198,7 +203,7 @@ export const OverviewGrid = memo(function OverviewGrid({
   return (
     <div className="relative w-full min-h-screen" style={{ background: "#0a0a12" }}>
       {/* Summary bar */}
-      <div className="max-w-[1600px] mx-auto flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+      <div className={`${compact ? "" : "max-w-[1600px] mx-auto "}flex items-center justify-between px-6 py-4 border-b border-white/[0.06]`}>
         <div className="flex items-center gap-4 text-sm font-mono">
           <span className="text-white/30 text-[10px] tracking-[4px] uppercase">Oracle Overview</span>
           <span className="text-white/60">{sessions.length} rooms</span>
@@ -224,12 +229,24 @@ export const OverviewGrid = memo(function OverviewGrid({
               <span className="text-white/30">{idleCount} idle</span>
             </span>
           )}
+          <button
+            onClick={toggleDensity}
+            className="text-[10px] font-mono px-2 py-1 rounded border transition-colors"
+            style={{
+              borderColor: compact ? "#7e57c260" : "rgba(255,255,255,0.1)",
+              color: compact ? "#b39ddb" : "rgba(255,255,255,0.4)",
+              background: compact ? "#7e57c215" : "transparent",
+            }}
+            title={compact ? "Switch to cozy view (big tiles)" : "Switch to compact view (fit all tiles)"}
+          >
+            {compact ? "▦ compact" : "▢ cozy"}
+          </button>
           <span className="text-[9px] text-white/15 font-mono">J to jump</span>
         </div>
       </div>
 
       {/* Session groups */}
-      <div className="max-w-[1600px] mx-auto px-6 py-6 flex flex-col gap-6">
+      <div className={compact ? "w-full px-3 py-3 flex flex-col gap-3" : "max-w-[1600px] mx-auto px-6 py-6 flex flex-col gap-6"}>
         {sessionGroups.map(([sessionName, sessionAgents]) => {
           const isOracles = sessionName === "_oracles";
           const style = isOracles ? { accent: "#7e57c2", floor: "#1a1428", wall: "#120e1e", label: "Oracles" } : roomStyle(sessionName);
@@ -239,7 +256,7 @@ export const OverviewGrid = memo(function OverviewGrid({
           return (
             <section key={sessionName}>
               {/* Session header */}
-              <div className="flex items-center gap-3 mb-3 px-1">
+              <div className={compact ? "flex items-center gap-2 mb-1.5 px-1" : "flex items-center gap-3 mb-3 px-1"}>
                 <kbd
                   className="w-6 h-6 flex items-center justify-center rounded text-[10px] font-bold font-mono flex-shrink-0"
                   style={{ background: `${style.accent}15`, color: `${style.accent}80`, border: `1px solid ${style.accent}25` }}
@@ -254,7 +271,7 @@ export const OverviewGrid = memo(function OverviewGrid({
                   }}
                 />
                 <h3
-                  className="text-sm font-bold tracking-[3px] uppercase"
+                  className={compact ? "text-[11px] font-bold tracking-[2px] uppercase" : "text-sm font-bold tracking-[3px] uppercase"}
                   style={{ color: style.accent }}
                 >
                   {displayName}
@@ -269,8 +286,8 @@ export const OverviewGrid = memo(function OverviewGrid({
 
               {/* Agent tiles grid */}
               <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))" }}
+                className={compact ? "grid gap-1.5" : "grid gap-3"}
+                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 180 : 340}px, 1fr))` }}
               >
                 {sessionAgents.map((agent, i) => (
                   <OverviewTile
@@ -279,6 +296,7 @@ export const OverviewGrid = memo(function OverviewGrid({
                     accent={style.accent}
                     shortcutKey={i + 1}
                     onClick={() => onSelectAgent(agent)}
+                    compact={compact}
                   />
                 ))}
               </div>

@@ -38,6 +38,8 @@ interface FleetStore {
   setSortMode: (mode: "active" | "name") => void;
   grouped: boolean;
   toggleGrouped: () => void;
+  density: "cozy" | "compact";
+  toggleDensity: () => void;
   collapsed: string[];
   toggleCollapsed: (key: string) => void;
   muted: boolean;
@@ -231,6 +233,8 @@ export const useFleetStore = create<FleetStore>()(
       setSortMode: (mode) => set({ sortMode: mode }),
       grouped: true,
       toggleGrouped: () => set((s) => ({ grouped: !s.grouped })),
+      density: "cozy",
+      toggleDensity: () => set((s) => ({ density: s.density === "cozy" ? "compact" : "cozy" })),
       collapsed: [],
       toggleCollapsed: (key) => set((s) => ({
         collapsed: s.collapsed.includes(key)
@@ -341,6 +345,7 @@ export const useFleetStore = create<FleetStore>()(
         recentMap: s.recentMap,
         sortMode: s.sortMode,
         grouped: s.grouped,
+        density: s.density,
         collapsed: s.collapsed,
         muted: s.muted,
         stageMode: s.stageMode,
