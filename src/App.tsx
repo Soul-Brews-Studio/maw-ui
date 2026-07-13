@@ -21,7 +21,7 @@ import { DashboardView } from "./components/DashboardView";
 import FederationView from "./components/FederationView";
 import DashboardPro from "./components/DashboardPro";
 import { ConnectPage } from "./components/ConnectPage";
-import { isRemote, activeHost, clearStoredHost, resetHttpHealth } from "./lib/api";
+import { isRemote, activeHost, clearStoredHost, resetHttpHealth, apiUrl } from "./lib/api";
 import { useHttpHealth } from "./hooks/useHttpHealth";
 import { JarvisView } from "./components/JarvisView";
 // BoBFaceView, BoardView, LoopsView, HallOfFameView, IPadDashboard
@@ -278,21 +278,57 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
   );
 }
 
+// Brief loading state shown while we probe the same-origin backend.
+function ProbeLoading() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{ background: "#050505" }}>
+      <div className="text-center">
+        <div className="text-3xl mb-3 animate-pulse">🔮</div>
+        <p className="font-mono text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>Connecting…</p>
+      </div>
+    </div>
+  );
+}
+
+type ProbeState = "probing" | "backend" | "no-backend";
+
 export function App() {
   useAudioUnlock();
 
-  // On hosted HTTPS origins without ?host=, there's no backend to talk to.
-  // Show the connect page instead of empty views.
-  const isHostedWithoutBackend =
+  // On hosted HTTPS origins without ?host= we used to assume there's no backend
+  // and show ConnectPage immediately. But self-hosted boxes serve this UI over
+  // HTTPS *and* proxy /api + /ws to a same-origin backend (e.g. nginx → :3456),
+  // so the URL alone can't tell the two apart. Instead, probe same-origin
+  // GET /api/config before deciding:
+  //   200 + has .node → backend present → render dashboard (no ?host= needed)
+  //   fail / timeout  → truly hosted without backend (god.buildwithoracle.com) → ConnectPage
+  const mightLackBackend =
     !isRemote &&
     typeof location !== "undefined" &&
     location.protocol === "https:" &&
     !location.hostname.match(/^(localhost|127\.0\.0\.1)$/);
 
-  if (isHostedWithoutBackend) {
-    return <ConnectPage />;
-  }
+  const [probe, setProbe] = useState<ProbeState>(mightLackBackend ? "probing" : "backend");
 
+  useEffect(() => {
+    if (!mightLackBackend) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    fetch(apiUrl("/api/config"), { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((cfg) => { if (!cancelled) setProbe(cfg && cfg.node ? "backend" : "no-backend"); })
+      .catch(() => { if (!cancelled) setProbe("no-backend"); })
+      .finally(() => clearTimeout(timer));
+    return () => { cancelled = true; ctrl.abort(); clearTimeout(timer); };
+  }, [mightLackBackend]);
+
+  if (probe === "probing") return <ProbeLoading />;
+  if (probe === "no-backend") return <ConnectPage />;
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const rawRoute = useHashRoute();
   const { view: route, agentName: hashAgent } = parseHash(rawRoute);
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
