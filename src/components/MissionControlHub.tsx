@@ -14,8 +14,12 @@ export const MissionControlHub = memo(function MissionControlHub({
   pinnedByUser,
   setPinnedPreview,
 }: MissionControlHubProps) {
-  const stageAgents = agents.filter(a => a.status === "busy" || a.status === "ready");
-  const busyCount = stageAgents.filter(a => a.status === "busy").length;
+  // ON STAGE = actively working agents only. Since the server's 2s `recent`
+  // push keeps every running-Claude agent stably "ready" (#70), including
+  // ready here would park the entire fleet as grey ghosts in the hub —
+  // they're already visible in their session clusters around the ring.
+  const stageAgents = agents.filter(a => a.status === "busy");
+  const busyCount = stageAgents.length;
   const hubR = Math.max(45, 30 + stageAgents.length * 25);
   const hasStage = stageAgents.length > 0;
 
