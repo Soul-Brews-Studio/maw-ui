@@ -18,6 +18,7 @@ export function useSessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const sessionsJsonRef = useRef("");
 
   const [eventLog, setEventLog] = useState<AgentEvent[]>([]);
   const MAX_EVENTS = 200;
@@ -104,7 +105,11 @@ export function useSessions() {
         setStatus(target, "busy");
       }
     } else if (FEED_STOP_EVENTS.has(event.event)) {
-      feedLastSeen.current[target] = 0; // mark stopped
+      // Finishing a turn IS recent activity — stamp now so ready persists
+      // for the normal IDLE_TIMEOUT. Setting 0 here made the decay tick
+      // demote ready → idle within 5s, blinking the agent out of every
+      // status-driven view right after each completed turn (#70).
+      feedLastSeen.current[target] = Date.now();
       const currentStatus = getStatus(target);
       if (currentStatus !== "ready") {
         addEvent(target, "status", `${currentStatus} → ready`);
@@ -188,7 +193,15 @@ export function useSessions() {
 
   const handleMessage = useCallback((data: any) => {
     if (data.type === "sessions") {
-      setSessions((data.sessions as Session[]).filter(s => !s.name.startsWith("maw-pty-")));
+      const next = (data.sessions as Session[]).filter(s => !s.name.startsWith("maw-pty-"));
+      // Server pushes sessions every 2s whether or not anything changed
+      // (verified: 23/23 identical payloads in 45s). Skip identical pushes —
+      // a fresh array here re-renders every session-consuming view (#70).
+      const json = JSON.stringify(next);
+      if (json !== sessionsJsonRef.current) {
+        sessionsJsonRef.current = json;
+        setSessions(next);
+      }
     } else if (data.type === "recent") {
       const agents: { target: string; name: string; session: string }[] = data.agents || [];
       if (agents.length > 0) {
@@ -203,6 +216,13 @@ export function useSessions() {
         const store = useFeedStatusStore.getState();
         for (const a of agents) {
           const current = store.statuses[a.target];
+          // These agents are verifiably running Claude right now — stamp
+          // lastSeen so the decay tick doesn't demote them back to idle
+          // seconds later. Without this the 2s recent-push + 5s decay
+          // formed a perpetual ready↔idle flap loop (#70). Skip busy
+          // agents: their lastSeen must come from real feed events or the
+          // busy → ready hang-decay would never fire.
+          if (current !== "busy") feedLastSeen.current[a.target] = Date.now();
           if (!current || current === "idle") {
             store.setStatus(a.target, "ready");
           }
