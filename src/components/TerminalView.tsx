@@ -20,6 +20,16 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   const outputRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; kind: "ok" | "warn" | "err" } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string, kind: "ok" | "warn" | "err" = "ok") => {
+    setToast({ msg, kind });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }, []);
 
   // Own WebSocket for capture stream (separate from main fleet WS)
   useEffect(() => {
@@ -92,6 +102,44 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     setSendQueue(q => [...q, text]);
   }, [selectedTarget]);
 
+  // Display name for the selected target (also used by the attach handler).
+  const selectedName = selectedTarget
+    ? sessions.flatMap(s => s.windows.map(w => ({ target: `${s.name}:${w.index}`, name: w.name }))).find(w => w.target === selectedTarget)?.name || ""
+    : "";
+
+  // 📎 attach: upload an image to labubu-upload, then inject its saved path into
+  // the SELECTED Oracle session via the same queueSend path used for typing.
+  // maw only tracks claude panes as AgentState — no agent for a target ⇒ it's a
+  // bash/non-claude window, so we warn instead of injecting (path would run as a
+  // shell command and the image would never reach an Oracle's context).
+  const uploadAttachment = useCallback(async (file: File) => {
+    if (!selectedTarget) { showToast("เลือกหน้าต่างก่อนแนบภาพ", "warn"); return; }
+    const isClaudeWindow = agents.some(a => a.target === selectedTarget);
+    if (!isClaudeWindow) {
+      showToast(`"${selectedName || selectedTarget}" ไม่ใช่ Claude session — ไม่ได้ฉีดภาพ (เลือกหน้าต่าง Oracle)`, "warn");
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/upload/api/file", { method: "POST", body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success || !data?.saved?.length) {
+        const reason = data?.errors?.[0]?.reason || `HTTP ${res.status}`;
+        showToast(`อัปโหลดล้มเหลว: ${reason}`, "err");
+        return;
+      }
+      const path: string = data.saved[0].path;
+      queueSend(`[ภาพแนบ — โปรดดู: ${path}]\n`);
+      showToast(`ส่งภาพไปที่ ${selectedName || selectedTarget} แล้ว`, "ok");
+    } catch {
+      showToast("อัปโหลดล้มเหลว (network)", "err");
+    } finally {
+      setUploading(false);
+    }
+  }, [selectedTarget, selectedName, agents, queueSend, showToast]);
+
   // Paste handler — fires on right-click paste or Ctrl+Shift+V
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
@@ -151,11 +199,6 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     }
   }, [selectedTarget, inputBuf, queueSend, selectWindow, sessions]);
 
-  // Get display name for selected target
-  const selectedName = selectedTarget
-    ? sessions.flatMap(s => s.windows.map(w => ({ target: `${s.name}:${w.index}`, name: w.name }))).find(w => w.target === selectedTarget)?.name || ""
-    : "";
-
   return (
     <div className="flex mx-4 sm:mx-6 mb-3 rounded-2xl overflow-hidden border border-white/[0.06]" style={{ height: "calc(100vh - 72px)" }}>
       {/* Sidebar */}
@@ -202,12 +245,25 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
       {/* Terminal pane */}
       <div
         ref={termRef}
-        className="flex-1 flex flex-col min-w-0 outline-none"
+        className="flex-1 flex flex-col min-w-0 outline-none relative"
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onClick={() => termRef.current?.focus()}
       >
+        {/* Attach toast — "sent to <target>" / warn / error */}
+        {toast && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 top-3 z-10 px-3 py-1.5 rounded-lg text-[12px] font-mono shadow-lg pointer-events-none"
+            style={{
+              background: toast.kind === "ok" ? "#1b3a2a" : toast.kind === "warn" ? "#3a341b" : "#3a1b1b",
+              color: toast.kind === "ok" ? "#7ee2a8" : toast.kind === "warn" ? "#e2cf7e" : "#e27e7e",
+              border: `1px solid ${toast.kind === "ok" ? "#2e6b4a" : toast.kind === "warn" ? "#6b5e2e" : "#6b2e2e"}`,
+            }}
+          >
+            {toast.kind === "ok" ? "✓ " : toast.kind === "warn" ? "⚠ " : "✕ "}{toast.msg}
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-white/[0.06] flex-shrink-0" style={{ background: "#0a0a12" }}>
           <span className="text-xs font-mono text-white/40">{selectedName || "select a window"}</span>
@@ -237,6 +293,30 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
           className="flex items-start px-3 py-1.5 border-t border-white/[0.06] font-mono text-[13px] min-h-[32px]"
           style={{ background: "#0d0d14" }}
         >
+          {/* 📎 attach — target-aware: disabled until a window is selected */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadAttachment(f);
+              e.target.value = "";  // allow re-selecting the same file
+            }}
+          />
+          <span
+            className="mr-2 mt-[1px] flex-shrink-0 select-none"
+            title={selectedTarget ? "แนบภาพไปยังหน้าต่างที่เลือก" : "เลือกหน้าต่างก่อน"}
+            style={{
+              cursor: selectedTarget && !uploading ? "pointer" : "not-allowed",
+              opacity: selectedTarget && !uploading ? 0.85 : 0.25,
+            }}
+            onMouseDown={(e) => e.preventDefault()}  // keep terminal focus
+            onClick={() => { if (selectedTarget && !uploading) fileInputRef.current?.click(); }}
+          >
+            {uploading ? "⏳" : "📎"}
+          </span>
           <span className="text-white/30 mr-2 mt-[1px] flex-shrink-0">&gt;</span>
           <span className="text-white/90 whitespace-pre flex-1">{inputBuf}</span>
           <span
