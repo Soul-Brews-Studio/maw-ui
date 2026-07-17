@@ -57,6 +57,21 @@ interface Session {
   windows: Array<{ name: string; active: boolean; repo?: string }>;
 }
 
+// Fleet comms digest (from the `digest` plugin at /api/digest).
+interface DigestResult {
+  windowLabel: string;
+  source: string;
+  llm: string;
+  totalMessages: number;
+  agents: string[];
+  summary: string;
+  conversations: Array<{ pair: string; count: number; summary: string }>;
+  blocked: string[];
+  pendingDone: string[];
+  attention: string[];
+  costs: Array<{ name: string; cost: number; tokens: number }>;
+}
+
 // ---- Data hook -----------------------------------------------------------
 
 function useDashboardData() {
@@ -64,6 +79,7 @@ function useDashboardData() {
   const [plugins, setPlugins] = useState<PluginStatus | null>(null);
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [digest, setDigest] = useState<DigestResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Live feed via WebSocket — instant updates, no polling
@@ -102,7 +118,21 @@ function useDashboardData() {
     return () => clearInterval(iv);
   }, [refresh]);
 
-  return { fed, plugins, feed, sessions, loading, refresh, wsConnected };
+  // Comms digest — fetched on its own cadence (it may run an LLM) so it never blocks core panels.
+  useEffect(() => {
+    const loadDigest = () => {
+      if (!isVisible()) return;
+      fetch(apiUrl("/api/digest"))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setDigest(d as DigestResult))
+        .catch(() => {});
+    };
+    loadDigest();
+    const iv = setInterval(loadDigest, 120_000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return { fed, plugins, feed, sessions, digest, loading, refresh, wsConnected };
 }
 
 // ---- Panels --------------------------------------------------------------
@@ -294,6 +324,62 @@ function LiveFeedPanel({ feed }: { feed: FeedEvent[] }) {
   );
 }
 
+function DigestList({ label, items, tone }: { label: string; items: string[]; tone: string }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-1.5">
+      <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: tone }}>
+        {label}
+      </div>
+      <ul className="space-y-0.5 list-disc list-inside">
+        {items.slice(0, 6).map((it, i) => (
+          <li key={i} className="text-xs text-white/60 leading-snug">{it}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DigestPanel({ digest }: { digest: DigestResult | null }) {
+  if (!digest) return <PanelShell title="Comms Digest 🌈" subtitle="loading…" />;
+  const d = digest;
+  return (
+    <PanelShell
+      title="Comms Digest 🌈"
+      subtitle={`${d.windowLabel} · ${d.totalMessages} msgs · ${d.agents.length} agents · ${d.llm}`}
+    >
+      <div className="text-xs text-white/70 leading-relaxed mb-1">{d.summary}</div>
+      <DigestList label="⚠️ attention" items={d.attention} tone="#f59e0b" />
+      <DigestList label="🚧 blocked / waiting" items={d.blocked} tone="#ef4444" />
+      <DigestList label="✅ claimed done (verify)" items={d.pendingDone} tone="#22c55e" />
+      {d.conversations.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wider text-white/30 mb-1">conversations</div>
+          <div className="space-y-1">
+            {d.conversations.slice(0, 8).map((c) => (
+              <div key={c.pair} className="flex items-start justify-between gap-3 text-xs">
+                <span className="text-white/60 whitespace-nowrap">
+                  {c.pair} <span className="text-white/25">({c.count})</span>
+                </span>
+                <span className="text-white/40 text-right">{c.summary}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {d.costs.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+          {d.costs.slice(0, 6).map((c) => (
+            <span key={c.name} className="text-[10px] text-white/40 font-mono">
+              {c.name.replace(/-oracle$/, "")}: ${c.cost.toFixed(2)}
+            </span>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
 // ---- Shell ---------------------------------------------------------------
 
 function PanelShell({
@@ -325,7 +411,7 @@ function formatUptime(seconds: number): string {
 // ---- Main ----------------------------------------------------------------
 
 export default function DashboardPro() {
-  const { fed, plugins, feed, sessions, loading, refresh, wsConnected } = useDashboardData();
+  const { fed, plugins, feed, sessions, digest, loading, refresh, wsConnected } = useDashboardData();
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -356,6 +442,8 @@ export default function DashboardPro() {
         <AgentGridPanel sessions={sessions} onRefresh={refresh} />
         <PluginPanel plugins={plugins} />
       </div>
+
+      <DigestPanel digest={digest} />
 
       <LiveFeedPanel feed={feed} />
     </div>
