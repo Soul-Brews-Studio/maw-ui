@@ -48,7 +48,7 @@
   <span class="brand">ORACLE VILLAGE</span>
   <input id="host" type="text" spellcheck="false" placeholder="https://your-node.ts.net/village/">
   <button id="go">เปิด</button>
-  <a class="btn" href="/#office">Office</a>
+  <a class="btn" id="office" href="./#office">Office</a>
 </header>
 <iframe id="frame" title="Oracle Village" allow="autoplay; fullscreen; xr-spatial-tracking"></iframe>
 <div id="hint">
@@ -63,9 +63,63 @@
   const frame = document.getElementById('frame');
   const hint = document.getElementById('hint');
 
+  const officeLink = document.getElementById('office');
+
   const stored = localStorage.getItem('maw:villageHost') || '';
   const initial = params.get('host') || stored;
   input.value = initial;
+
+  // The Office button must land on the ARRA Office of a real maw-js node.
+  // maw-ui reads its backend from ?host= (persisted in localStorage "maw-host"),
+  // so a bare "/#office" drops the visitor on ConnectPage — or, when this page is
+  // served from a plain static host, on that host's own index. A village URL is
+  // also not a maw node: the node usually sits on a sibling path of the same
+  // origin (e.g. .../village/ next to .../maw/), so guessing the origin is wrong
+  // too. Probe the candidates the same way ConnectPage does — /api/config must
+  // answer with a "node" field — and only then hand the host to maw-ui.
+  function mawCandidates() {
+    const out = [];
+    const push = (v) => { const u = (v || '').trim().replace(/\/+$/, ''); if (u && !out.includes(u)) out.push(u); };
+    push(normalize(params.get('maw') || ''));
+    push(localStorage.getItem('maw-host') || '');
+    const village = normalize(input.value);
+    if (village) {
+      try {
+        const u = new URL(village);
+        push(u.origin + u.pathname.replace(/\/[^/]*\/?$/, '/maw'));
+        push(u.origin);
+      } catch { /* not a URL yet */ }
+    }
+    return out;
+  }
+
+  async function isMawNode(host) {
+    try {
+      const res = await fetch(host + '/api/config', { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return false;
+      return !!(await res.json()).node;
+    } catch { return false; }
+  }
+
+  function syncOffice() {
+    const first = mawCandidates()[0];
+    officeLink.href = first ? './?host=' + encodeURIComponent(first) + '#office' : './#office';
+  }
+
+  officeLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const label = officeLink.textContent;
+    officeLink.textContent = 'Office…';
+    for (const host of mawCandidates()) {
+      if (await isMawNode(host)) {
+        location.href = './?host=' + encodeURIComponent(host) + '#office';
+        return;
+      }
+    }
+    officeLink.textContent = label;
+    // No reachable node — let maw-ui's own connect screen take over.
+    location.href = './#office';
+  });
 
   function normalize(raw) {
     const v = raw.trim();
@@ -92,12 +146,14 @@
     if (url) next.set('host', url); else next.delete('host');
     history.replaceState(null, '', location.pathname + (next.toString() ? '?' + next : ''));
     show(url);
+    syncOffice();
   }
 
   document.getElementById('go').addEventListener('click', open);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
 
   show(normalize(initial));
+  syncOffice();
 </script>
 </body>
 </html>
