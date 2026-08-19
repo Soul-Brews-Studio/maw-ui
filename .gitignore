@@ -6,7 +6,10 @@ dist/
 target/
 wrangler.god.json
 ψ/
+agents/
 
 # coder worktree artifacts — never belong in the product repo
 REPORT.md
 PR-REVIEW.md
+STATUS.txt
+VERDICT.md
