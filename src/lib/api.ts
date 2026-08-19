@@ -29,74 +29,121 @@
 const STORAGE_KEY = "maw-host";
 const RECENT_KEY = "maw-host-recent";
 
-const params = new URLSearchParams(window.location.search);
+/** Pure trust boundary for every backend origin used by operator auth. */
+export function canonicalizeBackendOrigin(
+  input: string,
+  pageProtocol: string,
+): { exactOrigin: string; mixedContent: boolean } {
+  const value = input.trim();
+  if (!value || value.startsWith("//") || /[@?#]/.test(value) || !/^(?:https?:\/\/)?[^/\\]+\/?$/i.test(value)) throw new Error("invalid_backend_origin");
+  const hasScheme = /^https?:\/\//i.test(value);
+  const schemeLike = /^[a-z][a-z\d+.-]*:/i.test(value);
+  if (schemeLike && !hasScheme && !/^[^/?#]+:\d+\/?$/.test(value)) throw new Error("invalid_backend_origin");
+  let url: URL;
+  try { url = new URL(hasScheme ? value : `https://${value}`); }
+  catch { throw new Error("invalid_backend_origin"); }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("invalid_backend_origin");
+  }
+  return {
+    exactOrigin: url.origin,
+    mixedContent: pageProtocol === "https:" && url.protocol === "http:",
+  };
+}
+
+const pageLocation = () => typeof window === "undefined" ? null : window.location;
+const storage = () => typeof localStorage === "undefined" ? null : localStorage;
+const params = new URLSearchParams(pageLocation()?.search ?? "");
 const urlHost = params.get("host");
 
 // Auto-persist: ?host= in URL → save to localStorage → redirect clean
 if (urlHost) {
-  localStorage.setItem(STORAGE_KEY, urlHost);
+  canonicalizeBackendOrigin(urlHost, pageLocation()?.protocol ?? "http:");
+  storage()?.setItem(STORAGE_KEY, urlHost);
   addRecentHost(urlHost);
-  const url = new URL(window.location.href);
+  const url = new URL(pageLocation()!.href);
   url.searchParams.delete("host");
   window.location.replace(url.toString());
 }
 
-const hostParam = localStorage.getItem(STORAGE_KEY);
+let hostParam = storage()?.getItem(STORAGE_KEY) ?? null;
+
+function activeBackendOrigin(): string | null {
+  const input = hostParam ?? pageLocation()?.origin ?? "http://localhost";
+  try { return canonicalizeBackendOrigin(input, pageLocation()?.protocol ?? "http:").exactOrigin; }
+  catch { return null; }
+}
+
+let operatorCredential: { exactOrigin: string; token: string } | null = null;
+
+export function setOperatorCredential(origin: string, token: string): void {
+  const bytes = new TextEncoder().encode(token).byteLength;
+  if (!token.trim() || bytes > 4096) throw new Error("invalid_operator_token");
+  try {
+    const headers = new Headers({ Authorization: `Bearer ${token}` });
+    if (headers.get("Authorization") !== `Bearer ${token}`) throw new Error();
+  } catch { throw new Error("invalid_operator_token"); }
+  operatorCredential = {
+    exactOrigin: canonicalizeBackendOrigin(origin, pageLocation()?.protocol ?? "http:").exactOrigin,
+    token,
+  };
+}
+
+export function clearOperatorCredential(): void { operatorCredential = null; }
+export function hasOperatorCredential(): boolean { return operatorCredential !== null; }
 
 /** Whether we're running in remote mode */
 export const isRemote = !!hostParam;
 
 /** Where the active host came from (always "config" or "local" after redirect) */
 export const hostSource: "config" | "local" =
-  localStorage.getItem(STORAGE_KEY) ? "config" : "local";
+  storage()?.getItem(STORAGE_KEY) ? "config" : "local";
 
 /** Raw active host value (from URL or config) */
 export const activeHost: string | null = hostParam;
 
 /** Read stored host from config */
 export function getStoredHost(): string | null {
-  return localStorage.getItem(STORAGE_KEY);
+  return storage()?.getItem(STORAGE_KEY) ?? null;
 }
 
 /** Save host to config + add to recent list */
 export function setStoredHost(host: string): void {
-  localStorage.setItem(STORAGE_KEY, host);
+  const next = canonicalizeBackendOrigin(host, pageLocation()?.protocol ?? "http:");
+  if (activeBackendOrigin() !== next.exactOrigin) clearOperatorCredential();
+  hostParam = host;
+  storage()?.setItem(STORAGE_KEY, host);
   addRecentHost(host);
 }
 
 /** Clear stored host (revert to local) */
 export function clearStoredHost(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  const localOrigin = pageLocation()?.origin ?? "http://localhost";
+  if (activeBackendOrigin() !== localOrigin) clearOperatorCredential();
+  hostParam = null;
+  storage()?.removeItem(STORAGE_KEY);
 }
 
 /** Get recent hosts list */
 export function getRecentHosts(): string[] {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+    return JSON.parse(storage()?.getItem(RECENT_KEY) || "[]");
   } catch { return []; }
 }
 
 function addRecentHost(host: string): void {
   const recent = getRecentHosts().filter(h => h !== host);
   recent.unshift(host);
-  localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, 8)));
+  storage()?.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, 8)));
 }
 
 /** Resolved {protocol, host:port} from `hostParam`, or null if same-origin. */
 function resolveHost(): { httpProto: string; wsProto: string; host: string } | null {
   if (!hostParam) return null;
-  // Strip trailing slash — browsers often append one to the URL, which
-  // causes double-slash in constructed paths: "localhost:3456/" + "/api/config"
-  // → "localhost:3456//api/config". The double-slash misses the CORS middleware
-  // (mounted on "/api/*", not "//api/*") and breaks everything.
-  if (hostParam.startsWith("https://")) {
-    return { httpProto: "https:", wsProto: "wss:", host: hostParam.slice("https://".length).replace(/\/+$/, "") };
-  }
-  if (hostParam.startsWith("http://")) {
-    return { httpProto: "http:", wsProto: "ws:", host: hostParam.slice("http://".length).replace(/\/+$/, "") };
-  }
-  // Bare host:port — default to https for backwards compatibility.
-  return { httpProto: "https:", wsProto: "wss:", host: hostParam.replace(/\/+$/, "") };
+  const origin = canonicalizeBackendOrigin(hostParam, pageLocation()?.protocol ?? "http:").exactOrigin;
+  const url = new URL(origin);
+  return { httpProto: url.protocol, wsProto: url.protocol === "https:" ? "wss:" : "ws:", host: url.host };
 }
 
 /** Build full URL for fetch() calls */
@@ -185,7 +232,22 @@ function isPrivateHost(): boolean {
  * Callers should still .catch — this never resolves on circuit-open.
  */
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  const url = path.startsWith("http") ? path : apiUrl(path);
+  if (!path.startsWith("/api/") || path.includes("\\")) throw new Error("invalid_api_path");
+  const activeOrigin = activeBackendOrigin();
+  if (!activeOrigin) throw new Error("invalid_backend_origin");
+  const resolved = new URL(path, `${activeOrigin}/`);
+  if (resolved.origin !== activeOrigin || !resolved.pathname.startsWith("/api/") || resolved.hash) {
+    throw new Error("invalid_api_path");
+  }
+  let suppliedHeaders: Headers;
+  try { suppliedHeaders = new Headers(init?.headers); }
+  catch { throw new Error("invalid_request_headers"); }
+  if (suppliedHeaders.has("Authorization") || suppliedHeaders.has("X-Maw-Token")) {
+    throw new Error("caller_auth_forbidden");
+  }
+  const requestToken = operatorCredential?.exactOrigin === resolved.origin ? operatorCredential.token : null;
+  if (requestToken) suppliedHeaders.set("Authorization", `Bearer ${requestToken}`);
+  const url = resolved.toString();
   const now = Date.now();
 
   // Circuit open: allow exactly one probe per OPEN_MS; reject the rest.
@@ -196,7 +258,12 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   // Chrome PNA: opt the request into the local-network address space when the
   // active host is private. Older Chromes ignore the option; newer ones use it
   // to drive the permission prompt instead of a hard block.
-  const finalInit: RequestInit & { targetAddressSpace?: "loopback" | "local" | "private" } = { ...init };
+  const finalInit: RequestInit & { targetAddressSpace?: "loopback" | "local" | "private" } = {
+    ...init,
+    headers: suppliedHeaders,
+    credentials: "omit",
+    redirect: "error",
+  };
   if (isPrivateHost()) {
     const r = resolveHost();
     const h = r?.host.split(":")[0].toLowerCase() ?? "";
@@ -215,13 +282,15 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     return res;
   } catch (err) {
     const fails = healthSnapshot.consecutiveFails + 1;
-    const msg = err instanceof Error ? err.message : String(err);
+    const raw = err instanceof Error ? err.message : String(err);
+    const msg = requestToken ? "api_fetch_failed" : raw;
+    const safeError = requestToken ? new Error(msg) : err;
     if (fails >= FAIL_THRESHOLD) {
       commit({ healthy: false, consecutiveFails: fails, openUntil: now + OPEN_MS, lastError: msg });
     } else {
       commit({ consecutiveFails: fails, lastError: msg });
     }
-    throw err;
+    throw safeError;
   }
 }
 
