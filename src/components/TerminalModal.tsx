@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import type { AgentState } from "../lib/types";
 
 const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
@@ -23,6 +23,19 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSibling, siblings }: TerminalModalProps) {
+  // Capture-phase Esc → close. Must run before xterm.js swallows the keydown
+  // and forwards Escape to the PTY as a literal byte.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0f]">
       <div className="flex flex-col h-full">
