@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useRef, useCallback } from "react";
+import { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ansiToHtml } from "../lib/ansi";
 import { roomStyle } from "../lib/constants";
 import { wsUrl } from "../lib/api";
@@ -17,6 +17,8 @@ interface TerminalViewProps {
 export const TerminalView = memo(function TerminalView({ sessions, agents, connected, onSelectAgent, initialTarget }: TerminalViewProps) {
   const { isNarrow } = useDevice();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [captureHtml, setCaptureHtml] = useState("");
   const [inputBuf, setInputBuf] = useState("");
@@ -211,6 +213,52 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     }
   }, [selectedTarget, inputBuf, queueSend, selectWindow, sessions]);
 
+  const sendKey = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN && selectedTarget) {
+      ws.send(JSON.stringify({ type: "send", target: selectedTarget, text, force: true }));
+    }
+  }, [selectedTarget]);
+
+  const displayHtml = useMemo(() => {
+    const query = searchQuery.trim();
+    if (!query) return captureHtml;
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return captureHtml.split(/(<[^>]*>)/).map(part =>
+      part.startsWith("<") ? part : part.replace(new RegExp(escaped, "gi"), match => `<mark style="background:#facc15;color:#111">${match}</mark>`)
+    ).join("");
+  }, [captureHtml, searchQuery]);
+
+  const copyOutput = useCallback(async () => {
+    const text = outputRef.current?.innerText || "";
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    showToast("Copied terminal output");
+  }, [showToast]);
+
+  const captureScreenshot = useCallback(() => {
+    const text = outputRef.current?.innerText || "";
+    const lines = text.split("\n");
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    canvas.width = Math.min(1600, Math.max(640, ...lines.map(line => line.length * 8 + 32)));
+    canvas.height = Math.max(120, lines.length * 18 + 32);
+    context.fillStyle = "#0a0a0f";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#d1d5db";
+    context.font = "13px monospace";
+    lines.forEach((line, index) => context.fillText(line, 16, 24 + index * 18));
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `terminal-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.png`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, "image/png");
+  }, []);
+
   return (
     <div className={`flex ${isNarrow ? "mx-0 mb-0" : "mx-4 sm:mx-6 mb-3 rounded-2xl"} overflow-hidden border border-white/[0.06]`} style={{ height: "calc(100vh - 72px)" }}>
       {isNarrow && drawerOpen && (
@@ -302,7 +350,23 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
           <span className="ml-auto text-[10px] font-mono" style={{ color: connected ? "#4caf50" : "#ef5350" }}>
             {connected ? "live" : "reconnecting"}
           </span>
+          {isNarrow && <button className="text-sm text-white/50" onClick={() => setSearchOpen(value => !value)} aria-label="Search terminal output">⌕</button>}
+          {isNarrow && <button className="text-sm text-white/50" onClick={copyOutput} aria-label="Copy terminal output">⧉</button>}
+          {isNarrow && <button className="text-sm text-white/50" onClick={captureScreenshot} aria-label="Screenshot terminal output">▣</button>}
         </div>
+
+        {isNarrow && searchOpen && (
+          <div className="flex gap-2 border-b border-white/[0.06] p-2">
+            <input
+              aria-label="Search terminal output"
+              className="min-w-0 flex-1 rounded bg-white/[0.06] px-3 py-1 text-sm text-white outline-none"
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder="Find in output"
+            />
+            <button className="text-white/50" onClick={() => { setSearchOpen(false); setSearchQuery(""); }}>×</button>
+          </div>
+        )}
 
         {/* Output */}
         <div
@@ -311,7 +375,7 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
           style={{ background: "#0a0a0f", whiteSpace: "pre", wordBreak: "normal", overflowX: "auto", color: "#aaa" }}
         >
           {captureHtml ? (
-            <div dangerouslySetInnerHTML={{ __html: captureHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: displayHtml }} />
           ) : (
             <div className="text-white/15 text-center mt-[30vh] text-sm">
               {selectedTarget ? "connecting..." : "select a window \u2190"}
@@ -320,6 +384,13 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
         </div>
 
         {/* Input line */}
+        {isNarrow && (
+          <div aria-label="Terminal assist keys" className="flex gap-1 overflow-x-auto border-t border-white/[0.06] p-1.5">
+            {[["Tab", "\t"], ["Esc", "\x1b"], ["^C", "\x03"], ["^D", "\x04"], ["↑", "\x1b[A"], ["↓", "\x1b[B"], ["←", "\x1b[D"], ["→", "\x1b[C"]].map(([label, value]) => (
+              <button key={label} className="min-w-10 rounded bg-white/[0.06] px-2 py-1.5 font-mono text-xs text-white/60" onClick={() => sendKey(value)}>{label}</button>
+            ))}
+          </div>
+        )}
         {isNarrow && (
           <div className="flex items-end gap-2 p-2 border-t border-white/[0.06]" style={{ background: "#0d0d14" }}>
             <textarea
