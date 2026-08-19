@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -13,6 +13,15 @@ interface XTerminalProps {
   onSelectSibling: (agent: AgentState) => void;
   readOnly?: boolean;
 }
+
+// Imperative handle so the chrome (TerminalModal) can inject text into the PTY
+// without owning the WebSocket — used by the 📎 attach button to type a saved
+// image path into the running Oracle, mirroring TerminalView's queueSend path.
+export interface XTerminalHandle {
+  inject: (text: string) => void;
+}
+
+const enc = new TextEncoder();
 
 // Catppuccin Mocha palette (matches AC array in ansi.ts)
 const THEME = {
@@ -39,8 +48,22 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
-export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibling, readOnly = false }: XTerminalProps) {
+export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal(
+  { target, onClose, onNavigate, siblings, onSelectSibling, readOnly = false },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Inject text into the live PTY as if typed. `\r` submits (xterm sends CR on
+  // Enter). No-op in read-only mode or when the socket isn't open.
+  useImperativeHandle(ref, () => ({
+    inject: (text: string) => {
+      const ws = wsRef.current;
+      if (readOnly || !ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(enc.encode(text));
+    },
+  }), [readOnly]);
 
   // Keep callbacks in refs so terminal effect doesn't re-run on every render
   const onCloseRef = useRef(onClose);
@@ -86,6 +109,7 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
       // Connect to PTY WebSocket
       ws = new WebSocket(wsUrl("/ws/pty"));
       ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
 
       ws.onopen = () => {
         ws!.send(JSON.stringify({
@@ -172,9 +196,10 @@ export function XTerminal({ target, onClose, onNavigate, siblings, onSelectSibli
       dataSub?.dispose();
       binSub?.dispose();
       ws?.close();
+      if (wsRef.current === ws) wsRef.current = null;
       term.dispose();
     };
   }, [target]);
 
   return <div ref={containerRef} className="w-full h-full" />;
-}
+});
