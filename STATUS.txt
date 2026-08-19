@@ -1,0 +1,6 @@
+Issue #75 shipped for review; do not merge from this worktree.
+Commit: e3077dc394a35bebf6c42c38067522c050b4888b
+Branch: agents/issue75 (pushed to origin)
+PR: https://github.com/Soul-Brews-Studio/maw-ui/pull/95
+Verification before shipping: npx tsc --noEmit PASS; bun test PASS (154/154); bun run build PASS, twice.
+Reviewed frozen diff SHA-256: d2a3cf1a331b41d0816019d4ed8604373d26dabc4603d9765ca32f23c6db015b
