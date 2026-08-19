@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef, type ReactNode } from "react";
-import { apiUrl, isRemote, activeHost } from "../lib/api";
+import { apiFetch, isRemote, activeHost } from "../lib/api";
 import { isVisible } from "../lib/visibility";
 import { SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound, type SoundProfile } from "../lib/sounds";
 
@@ -103,7 +103,7 @@ function useFleetTotal() {
   const [total, setTotal] = useState<FleetTotal | null>(null);
   useEffect(() => {
     const fetch_ = () => {
-      fetch(apiUrl("/api/costs"))
+      apiFetch("/api/costs")
         .then(r => r.ok ? r.json() : null)
         .then(d => { if (d?.total) setTotal(d.total); })
         .catch(() => {});

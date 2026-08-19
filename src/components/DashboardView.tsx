@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { isVisible } from "../lib/visibility";
 import { agentColor, roomStyle, guessCommand } from "../lib/constants";
 import { AgentAvatar } from "./AgentAvatar";
@@ -210,7 +210,7 @@ function TokenTracking() {
   useEffect(() => {
     const fetchTokens = () => {
       // /api/tokens is deprecated (HTTP 410) — use /api/costs instead
-      fetch(apiUrl("/api/costs"))
+      apiFetch("/api/costs")
         .then(r => r.ok ? r.json() : null)
         .then((data) => {
           if (!data) { setLoading(false); return; }

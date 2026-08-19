@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useCallback, useRef } from "react";
 import Editor from "@monaco-editor/react";
-import { apiUrl, getStoredHost, setStoredHost, clearStoredHost, getRecentHosts, activeHost } from "../lib/api";
+import { apiFetch, getStoredHost, setStoredHost, clearStoredHost, getRecentHosts, activeHost } from "../lib/api";
 
 function ConnectionSettings() {
   const [host, setHost] = useState(() => getStoredHost() || "");
@@ -128,11 +128,11 @@ function PinSettings() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    fetch(apiUrl("/api/pin-info")).then(r => r.json()).then(setInfo).catch(() => {});
+    apiFetch("/api/pin-info").then(r => r.json()).then(setInfo).catch(() => {});
   }, []);
 
   const handleSave = useCallback(() => {
-    fetch(apiUrl("/api/pin-set"), {
+    apiFetch("/api/pin-set", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pin }),
@@ -177,6 +177,8 @@ interface ConfigFile {
   enabled: boolean;
 }
 
+const requestError = (error: unknown) => error instanceof Error ? error.message : "Request failed";
+
 export const ConfigView = memo(function ConfigView() {
   const [files, setFiles] = useState<ConfigFile[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -189,7 +191,7 @@ export const ConfigView = memo(function ConfigView() {
   const originalRef = useRef("");
 
   const loadFiles = useCallback(() => {
-    fetch(apiUrl("/api/config-files"))
+    apiFetch("/api/config-files")
       .then((r) => r.json())
       .then((data) => setFiles(data.files || []))
       .catch(() => {});
@@ -203,7 +205,7 @@ export const ConfigView = memo(function ConfigView() {
     setValue(null);
     setDirty(false);
     setStatus(null);
-    fetch(apiUrl(`/api/config-file?path=${encodeURIComponent(path)}`))
+    apiFetch(`/api/config-file?path=${encodeURIComponent(path)}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) { setStatus({ type: "error", msg: data.error }); return; }
@@ -231,7 +233,7 @@ export const ConfigView = memo(function ConfigView() {
     setSaving(true);
     setStatus(null);
     try {
-      const res = await fetch(apiUrl(`/api/config-file?path=${encodeURIComponent(selected)}`), {
+      const res = await apiFetch(`/api/config-file?path=${encodeURIComponent(selected)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: value }),
@@ -252,21 +254,29 @@ export const ConfigView = memo(function ConfigView() {
   }, [value, selected]);
 
   const handleToggle = useCallback(async (path: string) => {
-    const res = await fetch(apiUrl(`/api/config-file/toggle?path=${encodeURIComponent(path)}`), { method: "POST" });
-    const data = await res.json();
-    if (data.ok) {
-      loadFiles();
-      if (selected === path) setSelected(data.newPath);
+    try {
+      const res = await apiFetch(`/api/config-file/toggle?path=${encodeURIComponent(path)}`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        loadFiles();
+        if (selected === path) setSelected(data.newPath);
+      }
+    } catch (error) {
+      setStatus({ type: "error", msg: requestError(error) });
     }
   }, [selected, loadFiles]);
 
   const handleDelete = useCallback(async (path: string) => {
     if (!confirm(`Delete ${path}?`)) return;
-    const res = await fetch(apiUrl(`/api/config-file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
-    const data = await res.json();
-    if (data.ok) {
-      loadFiles();
-      if (selected === path) { setSelected(null); setValue(null); }
+    try {
+      const res = await apiFetch(`/api/config-file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.ok) {
+        loadFiles();
+        if (selected === path) { setSelected(null); setValue(null); }
+      }
+    } catch (error) {
+      setStatus({ type: "error", msg: requestError(error) });
     }
   }, [selected, loadFiles]);
 
@@ -274,19 +284,23 @@ export const ConfigView = memo(function ConfigView() {
     if (!newName.trim()) return;
     const name = newName.endsWith(".json") ? newName : newName + ".json";
     const template = JSON.stringify({ name: name.replace(/\.json$/, ""), windows: [] }, null, 2);
-    const res = await fetch(apiUrl(`/api/config-file`), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, content: template }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      setShowNew(false);
-      setNewName("");
-      loadFiles();
-      loadFile(data.path);
-    } else {
-      setStatus({ type: "error", msg: data.error });
+    try {
+      const res = await apiFetch(`/api/config-file`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, content: template }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setShowNew(false);
+        setNewName("");
+        loadFiles();
+        loadFile(data.path);
+      } else {
+        setStatus({ type: "error", msg: data.error });
+      }
+    } catch (error) {
+      setStatus({ type: "error", msg: requestError(error) });
     }
   }, [newName, loadFiles, loadFile]);
 

@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { apiFetch } from "../lib/api";
 import { isVisible } from "../lib/visibility";
 
 const XTerminal = lazy(() => import("./XTerminal").then(m => ({ default: m.XTerminal })));
@@ -31,7 +32,7 @@ function timeAgo(iso: string) {
 
 async function fetchApi(path: string) {
   try {
-    const r = await fetch(`${JARVIS_API}${path}`);
+    const r = await apiFetch(`${JARVIS_API}${path}`);
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
@@ -104,7 +105,7 @@ export const JarvisView = memo(function JarvisView() {
   const toggleBot = useCallback(async () => {
     const v = !botEnabled;
     setBotEnabled(v);
-    try { await fetch(`${JARVIS_API}/toggle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: v }) }); } catch {}
+    try { await apiFetch(`${JARVIS_API}/toggle`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: v }) }); } catch {}
   }, [botEnabled]);
 
   const topIntents = stats?.top_intents as { intent: string; cnt: number }[] | undefined;

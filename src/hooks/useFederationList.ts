@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { isVisible } from "../lib/visibility";
 import type {
   FederationConfig,
@@ -36,7 +36,7 @@ export function useFederationList(): UseFederationList {
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl("/api/config"));
+      const res = await apiFetch("/api/config");
       if (!res.ok) throw new Error(`${res.status}`);
       const data: FederationConfig = await res.json();
       if (data.node && data.agents) {
@@ -52,7 +52,7 @@ export function useFederationList(): UseFederationList {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl("/api/federation/status"));
+      const res = await apiFetch("/api/federation/status");
       if (!res.ok) return;
       // Real maw-js shape: { peers: [{ url, reachable, latency }] }
       // PR's PeerStatus type:        [{ name, url, reachable, latencyMs }]

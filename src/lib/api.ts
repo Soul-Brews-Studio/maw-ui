@@ -281,6 +281,11 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     }
     return res;
   } catch (err) {
+    if (err && typeof err === "object" && "name" in err && err.name === "AbortError") {
+      const safeAbort = new Error("request_aborted");
+      safeAbort.name = "AbortError";
+      throw safeAbort;
+    }
     const fails = healthSnapshot.consecutiveFails + 1;
     const raw = err instanceof Error ? err.message : String(err);
     const msg = requestToken ? "api_fetch_failed" : raw;
