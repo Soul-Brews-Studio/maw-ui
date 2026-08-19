@@ -4,6 +4,7 @@ import { roomStyle } from "../lib/constants";
 import { wsUrl } from "../lib/api";
 import type { Session, AgentState } from "../lib/types";
 import { uploadTerminalImage } from "../lib/terminalImageUpload";
+import { useDevice } from "../hooks/useDevice";
 
 interface TerminalViewProps {
   sessions: Session[];
@@ -14,6 +15,8 @@ interface TerminalViewProps {
 }
 
 export const TerminalView = memo(function TerminalView({ sessions, agents, connected, onSelectAgent, initialTarget }: TerminalViewProps) {
+  const { isNarrow } = useDevice();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [captureHtml, setCaptureHtml] = useState("");
   const [inputBuf, setInputBuf] = useState("");
@@ -81,8 +84,16 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     setCaptureHtml("");
     setInputBuf("");
     setSendQueue([]);
+    setDrawerOpen(false);
     termRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!isNarrow || selectedTarget) return;
+    const firstSession = sessions[0];
+    const firstWindow = firstSession?.windows[0];
+    if (firstWindow) selectWindow(`${firstSession.name}:${firstWindow.index}`);
+  }, [isNarrow, selectedTarget, sessions, selectWindow]);
 
   useEffect(() => {
     if (!initialTarget || initialTarget === selectedTarget) return;
@@ -201,9 +212,25 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
   }, [selectedTarget, inputBuf, queueSend, selectWindow, sessions]);
 
   return (
-    <div className="flex mx-4 sm:mx-6 mb-3 rounded-2xl overflow-hidden border border-white/[0.06]" style={{ height: "calc(100vh - 72px)" }}>
+    <div className={`flex ${isNarrow ? "mx-0 mb-0" : "mx-4 sm:mx-6 mb-3 rounded-2xl"} overflow-hidden border border-white/[0.06]`} style={{ height: "calc(100vh - 72px)" }}>
+      {isNarrow && drawerOpen && (
+        <button
+          className="fixed inset-0 z-30 bg-black/60"
+          aria-label="Close terminal sessions"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
       {/* Sidebar */}
-      <div className="w-[220px] flex-shrink-0 flex flex-col border-r border-white/[0.06] overflow-y-auto" style={{ background: "#08080e" }}>
+      <div
+        className={`${isNarrow ? `fixed inset-y-0 left-0 z-40 w-[min(82vw,320px)] transition-transform ${drawerOpen ? "translate-x-0" : "-translate-x-full"}` : "w-[220px]"} flex-shrink-0 flex flex-col border-r border-white/[0.06] overflow-y-auto`}
+        style={{ background: "#08080e" }}
+      >
+        {isNarrow && (
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+            <span className="text-xs font-mono text-white/50">terminal sessions</span>
+            <button className="text-xl text-white/50" onClick={() => setDrawerOpen(false)} aria-label="Close terminal sessions">×</button>
+          </div>
+        )}
         {sessions.map(session => {
           const style = roomStyle(session.name);
           return (
@@ -267,6 +294,9 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
         )}
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-white/[0.06] flex-shrink-0" style={{ background: "#0a0a12" }}>
+          {isNarrow && (
+            <button className="text-lg text-white/60" onClick={() => setDrawerOpen(true)} aria-label="Open terminal sessions">☰</button>
+          )}
           <span className="text-xs font-mono text-white/40">{selectedName || "select a window"}</span>
           {selectedTarget && <span className="text-[10px] font-mono text-white/20">{selectedTarget}</span>}
           <span className="ml-auto text-[10px] font-mono" style={{ color: connected ? "#4caf50" : "#ef5350" }}>
@@ -290,8 +320,33 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
         </div>
 
         {/* Input line */}
+        {isNarrow && (
+          <div className="flex items-end gap-2 p-2 border-t border-white/[0.06]" style={{ background: "#0d0d14" }}>
+            <textarea
+              aria-label="Terminal input"
+              value={inputBuf}
+              disabled={!selectedTarget}
+              rows={1}
+              onChange={event => setInputBuf(event.target.value)}
+              onKeyDown={event => {
+                event.stopPropagation();
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  if (inputBuf) { queueSend(inputBuf); setInputBuf(""); }
+                }
+              }}
+              className="min-h-10 max-h-28 flex-1 resize-none rounded-lg bg-white/[0.05] px-3 py-2 font-mono text-sm text-white outline-none disabled:opacity-40"
+              placeholder={selectedTarget ? "Type a command…" : "Select a session"}
+            />
+            <button
+              className="h-10 rounded-lg bg-blue-500/20 px-4 text-sm text-blue-200 disabled:opacity-30"
+              disabled={!selectedTarget || !inputBuf}
+              onClick={() => { if (inputBuf) { queueSend(inputBuf); setInputBuf(""); } }}
+            >Send</button>
+          </div>
+        )}
         <div
-          className="flex items-start px-3 py-1.5 border-t border-white/[0.06] font-mono text-[13px] min-h-[32px]"
+          className={`${isNarrow ? "hidden" : "flex"} items-start px-3 py-1.5 border-t border-white/[0.06] font-mono text-[13px] min-h-[32px]`}
           style={{ background: "#0d0d14" }}
         >
           {/* 📎 attach — target-aware: disabled until a window is selected */}
