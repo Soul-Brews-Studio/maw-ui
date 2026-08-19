@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState, useCallback } from "react";
+import { lazy, Suspense, useRef, useState, useCallback, useEffect } from "react";
 import type { AgentState } from "../lib/types";
 import { uploadTerminalImage } from "../lib/terminalImageUpload";
 import type { XTerminalHandle } from "./XTerminal";
@@ -30,6 +30,17 @@ export function TerminalModal({ agent, send, onClose, onNavigate, onSelectSiblin
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; kind: "ok" | "warn" | "err" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [onClose]);
 
   const showToast = useCallback((msg: string, kind: "ok" | "warn" | "err" = "ok") => {
     setToast({ msg, kind });
