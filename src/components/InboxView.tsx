@@ -1,7 +1,9 @@
-import { memo, useState, useRef, useCallback, useEffect } from "react";
+import { memo, useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useFleetStore } from "../lib/store";
 import { agentColor } from "../lib/constants";
 import type { AskItem } from "../lib/types";
+import { useVisibleInterval, isVisible } from "../lib/visibility";
+import { ageLabel, fetchCrossTeamQueue, type CrossTeamQueueItem, type CrossTeamQueueResponse, type QueueTeam } from "../lib/crossTeamQueue";
 
 function timeAgo(ts: number): string {
   const s = Math.round((Date.now() - ts) / 1000);
@@ -112,6 +114,59 @@ function AskCard({ ask, send, onClose }: { ask: AskItem; send: (msg: object) => 
   );
 }
 
+type QueueTab = "all" | Exclude<QueueTeam, "unknown">;
+const QUEUE_TABS: QueueTab[] = ["all", "software", "business", "cross"];
+const TAB_LABEL: Record<QueueTab, string> = { all: "All", software: "Software", business: "Business", cross: "Cross-Team" };
+
+function copyQueuePath(path: string) { navigator.clipboard?.writeText(path).catch(() => {}); }
+
+function CrossTeamSection() {
+  const [data, setData] = useState<CrossTeamQueueResponse>({ scannedAt: "", items: [], errors: [] });
+  const [tab, setTab] = useState<QueueTab>("all");
+  const loadQueue = useCallback(async () => {
+    const next = await fetchCrossTeamQueue();
+    if (next) setData(next);
+  }, []);
+  useEffect(() => { if (isVisible()) void loadQueue(); }, [loadQueue]);
+  useVisibleInterval(loadQueue, 30_000);
+
+  const items = useMemo(() => tab === "all" ? data.items : data.items.filter(item => item.team === tab), [data.items, tab]);
+  const counts = useMemo(() => Object.fromEntries(QUEUE_TABS.map(key => [key, key === "all" ? data.items.length : data.items.filter(item => item.team === key).length])), [data.items]);
+  const openItem = (item: CrossTeamQueueItem) => {
+    try { if (!window.open(`file://${item.path}`, "_blank")) copyQueuePath(item.path); }
+    catch { copyQueuePath(item.path); }
+  };
+
+  return <section className="mt-5" aria-labelledby="cross-team-heading">
+    <div className="flex items-baseline justify-between mb-2">
+      <h3 id="cross-team-heading" className="text-[11px] font-mono text-white/40 uppercase tracking-wider">Cross-Team Decisions ({items.length})</h3>
+      {data.scannedAt && <span className="text-[9px] font-mono text-white/20">updated {new Date(data.scannedAt).toLocaleTimeString()}</span>}
+    </div>
+    <div role="tablist" aria-label="Filter decisions by team" className="flex gap-1 mb-3">
+      {QUEUE_TABS.map(key => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+        className="px-2 py-1 rounded-lg text-[11px] font-mono focus-visible:outline-2 focus-visible:outline-cyan-400"
+        style={{ background: tab === key ? "rgba(34,211,238,.15)" : "rgba(255,255,255,.04)", color: tab === key ? "#22d3ee" : "rgba(255,255,255,.5)" }}>
+        {TAB_LABEL[key]} <span className="text-white/30">{counts[key]}</span>
+      </button>)}
+    </div>
+    <div role="tabpanel" aria-live="polite" className="flex flex-col gap-2">
+      {items.length === 0 && <p className="text-center py-5 text-white/30 text-xs">No pending decisions</p>}
+      {items.map(item => <article key={item.id} className="rounded-xl p-3 border border-white/[.06] bg-white/[.02]">
+        <div className="flex items-center gap-2 text-[11px]">
+          <span style={{ color: agentColor(item.from) }} className="font-semibold">{item.from}</span><span className="text-white/30">→</span><span className="text-white/70">{item.to}</span>
+          <span className="text-amber-300/70">{item.type}</span><span className="ml-auto text-white/30">{ageLabel(item.ageHours)}</span>
+          <button onClick={() => openItem(item)} aria-label={`Open ${item.title} in editor`} className="text-cyan-400 px-1 focus-visible:outline-2 focus-visible:outline-cyan-400">↗</button>
+        </div>
+        <h4 className="text-[13px] text-white/85 mt-1">{item.title}</h4>
+        {item.preview && <p className="text-[11px] text-white/50 line-clamp-2">{item.preview}</p>}
+        {item.actionHint && <p className="text-[11px] text-amber-300/80">Action: {item.actionHint}</p>}
+      </article>)}
+    </div>
+    {data.errors.length > 0 && <details className="mt-2 text-[10px] text-red-400/60"><summary>{data.errors.length} parse errors</summary>
+      {data.errors.map(error => <div key={error.path}>{error.path}: {error.reason}</div>)}</details>}
+  </section>;
+}
+
 export const InboxOverlay = memo(function InboxOverlay({ send, onClose }: { send: (msg: object) => void; onClose: () => void }) {
   const asks = useFleetStore((s) => s.asks);
   const pending = asks.filter((a) => !a.dismissed);
@@ -129,7 +184,7 @@ export const InboxOverlay = memo(function InboxOverlay({ send, onClose }: { send
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="relative w-full max-w-lg mx-4 max-h-[70vh] flex flex-col rounded-2xl border overflow-hidden"
+      <div className="relative w-full max-w-lg mx-4 max-h-[80vh] flex flex-col rounded-2xl border overflow-hidden"
         style={{ background: "#0a0a12", borderColor: "rgba(255,255,255,0.08)", boxShadow: "0 25px 50px rgba(0,0,0,0.7)" }}
         onClick={(e) => e.stopPropagation()}>
         {/* Header */}
@@ -137,7 +192,7 @@ export const InboxOverlay = memo(function InboxOverlay({ send, onClose }: { send
           <h2 className="text-sm font-bold tracking-wider text-cyan-400 uppercase">
             Inbox {pending.length > 0 && <span className="text-red-400">({pending.length})</span>}
           </h2>
-          <button onClick={onClose} className="text-white/30 hover:text-white/60 text-lg leading-none px-1">&times;</button>
+          <button onClick={onClose} aria-label="Close inbox" className="text-white/30 hover:text-white/60 text-lg leading-none px-1">&times;</button>
         </div>
 
         {/* Content */}
@@ -172,6 +227,7 @@ export const InboxOverlay = memo(function InboxOverlay({ send, onClose }: { send
               </div>
             </>
           )}
+          <CrossTeamSection />
         </div>
       </div>
     </div>
