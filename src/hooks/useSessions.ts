@@ -11,12 +11,14 @@ import { usePreviewStore } from "../lib/previewStore";
 import { activeOracles, type FeedEvent, type FeedEventType } from "../lib/feed";
 import { acceptFeedEvent } from "../lib/feedEventOrder";
 import type { AskType } from "../lib/types";
+import { wsServerError } from "../lib/wsServerError";
 
 const BUSY_TIMEOUT = 15_000; // 15s without feed → ready
 const IDLE_TIMEOUT = 60_000; // 60s without feed → idle
 
 export function useSessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [serverError, setServerError] = useState<string | null>(null);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const sessionsJsonRef = useRef("");
@@ -198,7 +200,11 @@ export function useSessions() {
   }, [resolveAgentFromFeed]);
 
   const handleMessage = useCallback((data: any) => {
-    if (data.type === "sessions") {
+    const error = wsServerError(data);
+    if (error) {
+      setServerError(error);
+    } else if (data.type === "sessions") {
+      setServerError(null);
       const next = (data.sessions as Session[]).filter(s => !s.name.startsWith("maw-pty-"));
       // Server pushes sessions every 2s whether or not anything changed
       // (verified: 23/23 identical payloads in 45s). Skip identical pushes —
@@ -318,5 +324,5 @@ export function useSessions() {
     return map;
   }, [feedEvents, resolveAgentFromFeed]);
 
-  return { sessions, agents, eventLog, addEvent, handleMessage, feedEvents, feedActive, agentFeedLog, teams };
+  return { sessions, agents, eventLog, addEvent, handleMessage, feedEvents, feedActive, agentFeedLog, teams, serverError };
 }

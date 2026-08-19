@@ -33,12 +33,13 @@ export interface AppContext {
   teams: ReturnType<typeof useSessions>["teams"];
   connected: boolean;
   reconnecting: boolean;
+  serverError: string | null;
   send: (msg: object) => void;
   onSelectAgent: (agent: AgentState) => void;
 }
 
 export function AppShell({ view, fullHeight, children }: AppShellProps) {
-  const { sessions, agents, eventLog, addEvent, handleMessage, feedEvents, feedActive, agentFeedLog, teams } = useSessions();
+  const { sessions, agents, eventLog, addEvent, handleMessage, feedEvents, feedActive, agentFeedLog, teams, serverError } = useSessions();
 
   const muted = useFleetStore((s) => s.muted);
   const toggleMuted = useFleetStore((s) => s.toggleMuted);
@@ -59,7 +60,7 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
 
   const ctx: AppContext = {
     sessions, agents, eventLog, addEvent, feedEvents, feedActive, agentFeedLog, teams,
-    connected, reconnecting, send, onSelectAgent,
+    connected, reconnecting, serverError, send, onSelectAgent,
   };
 
   return (
@@ -81,6 +82,14 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
             />
           </div>
           {children(ctx)}
+          {serverError && (
+            <div className="fixed top-0 inset-x-0 z-[9999] flex justify-center pt-3 px-4 pointer-events-none">
+              <div className="pointer-events-auto px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-lg max-w-2xl" style={{ background: "rgba(20,5,5,0.92)", border: "1px solid rgba(239,68,68,0.4)" }}>
+                <p className="font-mono text-xs font-bold" style={{ color: "#fca5a5" }}>⚠️ Live data is stale</p>
+                <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>{serverError}</p>
+              </div>
+            </div>
+          )}
           <div
             className="fixed bottom-1 right-2 z-[9999] font-mono pointer-events-none select-none"
             style={{ fontSize: 9, color: "rgba(255,255,255,0.25)" }}
