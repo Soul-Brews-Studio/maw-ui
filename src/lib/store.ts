@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
-import { apiFetch } from "./api";
+import { apiFetch, hasOperatorCredential, subscribeOperatorCredential } from "./api";
 
 export interface RecentEntry {
   name: string;
@@ -110,15 +110,17 @@ const RECENT_TTL = 30 * 60 * 1000; // 30 minutes
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingWrite: string | null = null;
 let lastServerWrite: string | null = null;
+let syncActive = false;
+let syncController: AbortController | null = null;
 
 function flushWrite() {
-  if (pendingWrite === null) return;
+  if (!syncActive || pendingWrite === null) return;
   const body = pendingWrite;
   pendingWrite = null;
   apiFetch(`/api/ui-state`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body,
+    body, signal: syncController?.signal,
   }).catch(() => {}); // fire-and-forget
 }
 
@@ -127,12 +129,15 @@ const SYNC_INTERVAL = 5_000;
 
 /** Sync server state into localStorage, then rehydrate Zustand. */
 function syncFromServer(name: string) {
+  if (!syncActive) return;
+  const controller = syncController;
   // Hidden tabs don't need cross-device updates — resync on return
   if (typeof document !== "undefined" && document.hidden) return;
   const now = Date.now();
   if (now - lastSyncTime < SYNC_INTERVAL) return;
   lastSyncTime = now;
-  apiFetch("/api/ui-state").then(async (res) => {
+  apiFetch("/api/ui-state", { signal: controller?.signal }).then(async (res) => {
+    if (!syncActive || syncController !== controller) return;
     if (!res.ok) return;
     const data = await res.json();
     if (!data || Object.keys(data).length === 0) return;
@@ -158,7 +163,7 @@ const hybridStorage: StateStorage = {
     // Then background-sync from server for cross-device updates (debounced:
     // getItem() fires on every store read, so without this flag a single
     // render cycle can queue hundreds of redundant setTimeout calls — #67)
-    if (!syncScheduled) {
+    if (syncActive && !syncScheduled) {
       syncScheduled = true;
       setTimeout(() => { syncScheduled = false; syncFromServer(name); }, 0);
     }
@@ -167,6 +172,7 @@ const hybridStorage: StateStorage = {
   setItem: (name, value) => {
     // Write to localStorage immediately (instant on next refresh)
     localStorage.setItem(name, value);
+    if (!syncActive) return;
     // Debounced write to server (cross-device sync). recentMap churns on
     // every feed event, which kept this debounce permanently hot (1 POST/s
     // per tab on a busy fleet) — compare/send the state WITHOUT recentMap
@@ -185,10 +191,11 @@ const hybridStorage: StateStorage = {
   },
   removeItem: (name) => {
     localStorage.removeItem(name);
+    if (!syncActive) return;
     apiFetch(`/api/ui-state`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: "{}",
+      body: "{}", signal: syncController?.signal,
     }).catch(() => {});
   },
 };
@@ -196,12 +203,13 @@ const hybridStorage: StateStorage = {
 // --- Asks persistence (separate from ui-state) ---
 let askSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function persistAsks(asks: AskItem[]) {
+  if (!syncActive) return;
   if (askSaveTimer) clearTimeout(askSaveTimer);
   askSaveTimer = setTimeout(() => {
     apiFetch(`/api/asks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(asks),
+      body: JSON.stringify(asks), signal: syncController?.signal,
     }).catch(() => {});
   }, 1000);
 }
@@ -393,16 +401,38 @@ export const useFleetStore = create<FleetStore>()(
   )
 );
 
-// Load asks from server on startup
-setTimeout(() => {
-  apiFetch("/api/asks")
+function startStoreSync() {
+  if (syncActive) return;
+  syncActive = true;
+  syncController = new AbortController();
+  lastSyncTime = 0;
+  syncFromServer("maw.fleet");
+  const controller = syncController;
+  apiFetch("/api/asks", { signal: controller.signal })
     .then((r) => r.json())
     .then((data: AskItem[]) => {
-      if (Array.isArray(data) && data.length > 0) {
+      if (syncActive && syncController === controller && Array.isArray(data) && data.length > 0) {
         useFleetStore.setState({ asks: data });
       }
     })
     .catch(() => {});
-}, 0);
+}
+
+function stopStoreSync() {
+  syncActive = false;
+  syncController?.abort();
+  syncController = null;
+  if (writeTimer) clearTimeout(writeTimer);
+  if (askSaveTimer) clearTimeout(askSaveTimer);
+  writeTimer = askSaveTimer = null;
+  pendingWrite = null;
+  lastServerWrite = null;
+  syncScheduled = false;
+}
+
+if (typeof document !== "undefined") {
+  subscribeOperatorCredential(() => hasOperatorCredential() ? startStoreSync() : stopStoreSync());
+  if (hasOperatorCredential()) startStoreSync();
+}
 
 export const RECENT_TTL_MS = RECENT_TTL;

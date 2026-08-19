@@ -35,9 +35,8 @@ describe("selected-backend HTTP source inventory", () => {
     expect(rawFetches(shipped)).toHaveLength(1);
   });
 
-  test("keeps exactly two credential-free candidate /api/config probes raw", () => {
+  test("keeps ConnectPage network-free and only the Config candidate probe raw", () => {
     const probes = [
-      ["src/components/ConnectPage.tsx", "`${normalized}/api/config`"],
       ["src/components/ConfigView.tsx", "`${base}/api/config`"],
     ] as const;
     for (const [file, target] of probes) {
@@ -47,5 +46,6 @@ describe("selected-backend HTTP source inventory", () => {
       const call = text.slice(text.indexOf(`fetch(${target}`), text.indexOf(");", text.indexOf(`fetch(${target}`)) + 2);
       expect(call).not.toMatch(/Authorization|X-Maw-Token|apiFetch/);
     }
+    expect(rawFetches(source("src/components/ConnectPage.tsx"))).toHaveLength(0);
   });
 });

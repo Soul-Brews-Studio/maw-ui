@@ -1,74 +1,32 @@
-import { memo, useState, useEffect } from "react";
-
-const STORAGE_KEY = "maw-recent-hosts";
-const MAX_RECENT = 5;
-
-function getRecentHosts(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveHost(host: string) {
-  const recent = getRecentHosts().filter((h) => h !== host);
-  recent.unshift(host);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
-}
+import { memo, useState } from "react";
+import { canonicalizeBackendOrigin, getRecentHosts, setStoredHost } from "../lib/api";
 
 /**
  * ConnectPage — shown when maw-ui has no backend connection.
  *
  * On hosted origins (god.buildwithoracle.com) without ?host=, every /api
  * call fails. Instead of showing empty views, show this: one input field,
- * paste any maw-js address, test the connection, redirect on success.
+ * paste an operator address, validate it locally, and reload into the auth gate.
  *
  * Inspired by natman95's LandingPage.tsx visual bones (PR #4) — stripped
  * of pricing/signup/trials. Just: connect and go.
  */
 export const ConnectPage = memo(function ConnectPage() {
   const [host, setHost] = useState("");
-  const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent] = useState(getRecentHosts);
 
-  useEffect(() => {
-    setRecent(getRecentHosts());
-  }, []);
-
-  const connect = async (target: string) => {
-    const trimmed = target.trim();
-    if (!trimmed) return;
-
-    setTesting(true);
+  const connect = (target: string) => {
     setError("");
-
-    // Normalize: add http:// if no protocol
-    const normalized = trimmed.match(/^https?:\/\//) ? trimmed : `http://${trimmed}`;
-
     try {
-      const res = await fetch(`${normalized}/api/config`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json();
-      if (!data.node) throw new Error("not a maw-js node");
-
-      // Success — save + redirect
-      saveHost(normalized);
-      const currentHash = window.location.hash || "#office";
-      window.location.href = `${window.location.pathname}?host=${encodeURIComponent(normalized)}${currentHash}`;
-    } catch (e: any) {
-      setError(
-        e.name === "TimeoutError"
-          ? "Connection timed out — is the address correct?"
-          : e.message?.includes("Failed to fetch")
-            ? "Can't reach that address — check the URL and try again"
-            : `Connection failed: ${e.message}`,
-      );
-    } finally {
-      setTesting(false);
+      const next = canonicalizeBackendOrigin(target, window.location.protocol);
+      if (next.mixedContent) throw new Error("mixed_content");
+      setStoredHost(next.exactOrigin);
+      window.location.reload();
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message === "mixed_content"
+        ? "HTTPS pages cannot connect to HTTP backends. Use HTTPS for the operator host."
+        : "Enter a valid HTTP or HTTPS operator origin.");
     }
   };
 
@@ -99,11 +57,10 @@ export const ConnectPage = memo(function ConnectPage() {
               border: `1px solid ${error ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.1)"}`,
             }}
             autoFocus
-            disabled={testing}
           />
           <button
             onClick={() => connect(host)}
-            disabled={testing || !host.trim()}
+            disabled={!host.trim()}
             className="px-5 py-3 rounded-xl text-sm font-mono font-bold transition-all hover:scale-105 disabled:opacity-30"
             style={{
               background: "rgba(0,245,212,0.1)",
@@ -111,7 +68,7 @@ export const ConnectPage = memo(function ConnectPage() {
               border: "1px solid rgba(0,245,212,0.25)",
             }}
           >
-            {testing ? "..." : "Go"}
+            Go
           </button>
         </div>
 
@@ -129,7 +86,6 @@ export const ConnectPage = memo(function ConnectPage() {
                 <button
                   key={h}
                   onClick={() => connect(h)}
-                  disabled={testing}
                   className="w-full text-left px-3 py-2 rounded-lg text-xs font-mono transition-all hover:bg-white/[0.05]"
                   style={{ color: "rgba(255,255,255,0.4)" }}
                 >
