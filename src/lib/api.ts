@@ -75,23 +75,80 @@ function activeBackendOrigin(): string | null {
   catch { return null; }
 }
 
-let operatorCredential: { exactOrigin: string; token: string } | null = null;
+type OperatorCredential = { exactOrigin: string; token: string; generation: number };
+export type OperatorAuthOutcome = "authenticated" | "unauthorized" | "forbidden" | "unavailable"
+  | "invalid_response" | "aborted" | "stale";
 
-export function setOperatorCredential(origin: string, token: string): void {
+let operatorCredential: OperatorCredential | null = null;
+let operatorGeneration = 0;
+const operatorListeners = new Set<() => void>();
+
+function candidateHeaders(token: string): Headers | null {
   const bytes = new TextEncoder().encode(token).byteLength;
-  if (!token.trim() || bytes > 4096) throw new Error("invalid_operator_token");
+  if (!token.trim() || bytes > 4096) return null;
   try {
-    const headers = new Headers({ Authorization: `Bearer ${token}` });
-    if (headers.get("Authorization") !== `Bearer ${token}`) throw new Error();
-  } catch { throw new Error("invalid_operator_token"); }
-  operatorCredential = {
-    exactOrigin: canonicalizeBackendOrigin(origin, pageLocation()?.protocol ?? "http:").exactOrigin,
-    token,
-  };
+    const headers = new Headers({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
+    return headers.get("Authorization") === `Bearer ${token}` ? headers : null;
+  } catch { return null; }
 }
 
-export function clearOperatorCredential(): void { operatorCredential = null; }
+function invalidateOperatorCredential(expected?: OperatorCredential): void {
+  if (expected && operatorCredential !== expected) return;
+  operatorGeneration++;
+  if (!operatorCredential) return;
+  operatorCredential = null;
+  operatorListeners.forEach(listener => listener());
+}
+
+export function clearOperatorCredential(): void { invalidateOperatorCredential(); }
 export function hasOperatorCredential(): boolean { return operatorCredential !== null; }
+export function subscribeOperatorCredential(listener: () => void): () => void {
+  operatorListeners.add(listener);
+  return () => { operatorListeners.delete(listener); };
+}
+
+export async function authenticateOperator(token: string, signal?: AbortSignal): Promise<OperatorAuthOutcome> {
+  invalidateOperatorCredential();
+  const generation = operatorGeneration;
+  const exactOrigin = activeBackendOrigin();
+  const headers = candidateHeaders(token);
+  const current = () => generation === operatorGeneration && activeBackendOrigin() === exactOrigin;
+  if (!exactOrigin || !headers) return "invalid_response";
+  if (canonicalizeBackendOrigin(exactOrigin, pageLocation()?.protocol ?? "http:").mixedContent) return "invalid_response";
+  const init: RequestInit & { targetAddressSpace?: "loopback" | "local" } = {
+    method: "POST", headers, body: '{"path":"/ws"}', credentials: "omit", redirect: "error",
+    cache: "no-store", signal,
+  };
+  if (isPrivateHost()) init.targetAddressSpace = new URL(exactOrigin).hostname.toLowerCase() === "localhost"
+    || new URL(exactOrigin).hostname === "127.0.0.1" ? "loopback" : "local";
+  let response: Response;
+  try { response = await fetch(`${exactOrigin}/api/auth/ws-ticket`, init); }
+  catch (error) {
+    if (!current()) return "stale";
+    return signal?.aborted || (error && typeof error === "object" && "name" in error && error.name === "AbortError")
+      ? "aborted" : "unavailable";
+  }
+  if (!current()) return "stale";
+  if (response.status === 401) return "unauthorized";
+  if (response.status === 403) return "forbidden";
+  if (response.status >= 500) return "unavailable";
+  const jsonType = /^application\/json(?:\s*;|$)/i.test(response.headers.get("Content-Type") ?? "");
+  const noStore = (response.headers.get("Cache-Control") ?? "").split(",")
+    .some(directive => directive.trim().toLowerCase() === "no-store");
+  if (response.status !== 200 || !jsonType || !noStore) return "invalid_response";
+  let proof: unknown;
+  try { proof = await response.json(); }
+  catch { return current() ? "invalid_response" : "stale"; }
+  if (!current()) return "stale";
+  if (!proof || typeof proof !== "object" || Array.isArray(proof)
+      || Object.keys(proof).sort().join() !== "protocol,ticket") return "invalid_response";
+  const value = proof as { protocol?: unknown; ticket?: unknown };
+  if (value.protocol !== "maw.ws.v1" || typeof value.ticket !== "string"
+      || !/^mwt1_[0-9a-f]{64}$/.test(value.ticket)) return "invalid_response";
+  operatorCredential = { exactOrigin, token, generation };
+  operatorListeners.forEach(listener => listener());
+  return "authenticated";
+}
 
 /** Whether we're running in remote mode */
 export const isRemote = !!hostParam;
@@ -111,7 +168,7 @@ export function getStoredHost(): string | null {
 /** Save host to config + add to recent list */
 export function setStoredHost(host: string): void {
   const next = canonicalizeBackendOrigin(host, pageLocation()?.protocol ?? "http:");
-  if (activeBackendOrigin() !== next.exactOrigin) clearOperatorCredential();
+  clearOperatorCredential();
   hostParam = host;
   storage()?.setItem(STORAGE_KEY, host);
   addRecentHost(host);
@@ -119,8 +176,7 @@ export function setStoredHost(host: string): void {
 
 /** Clear stored host (revert to local) */
 export function clearStoredHost(): void {
-  const localOrigin = pageLocation()?.origin ?? "http://localhost";
-  if (activeBackendOrigin() !== localOrigin) clearOperatorCredential();
+  clearOperatorCredential();
   hostParam = null;
   storage()?.removeItem(STORAGE_KEY);
 }
@@ -245,7 +301,8 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   if (suppliedHeaders.has("Authorization") || suppliedHeaders.has("X-Maw-Token")) {
     throw new Error("caller_auth_forbidden");
   }
-  const requestToken = operatorCredential?.exactOrigin === resolved.origin ? operatorCredential.token : null;
+  const requestCredential = operatorCredential?.exactOrigin === resolved.origin ? operatorCredential : null;
+  const requestToken = requestCredential?.token ?? null;
   if (requestToken) suppliedHeaders.set("Authorization", `Bearer ${requestToken}`);
   const url = resolved.toString();
   const now = Date.now();
@@ -273,6 +330,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 
   try {
     const res = await fetch(url, finalInit);
+    if (res.status === 401 && requestCredential) invalidateOperatorCredential(requestCredential);
     // 5xx is still a "real" failure for breaker purposes; 4xx is not.
     if (res.status >= 500) throw new Error(`http_${res.status}`);
     // Success → reset.
