@@ -1,0 +1,28 @@
+A2 READY TO SHIP — network-free host selection + auth-bound store effects
+
+Red-first captured on exact origin/main base:
+- "keeps ConnectPage network-free and only the Config candidate probe raw" found ConnectPage's raw /api/config fetch.
+- "does not schedule backend synchronization during unauthenticated module evaluation" found startup asks timer and hydration sync timer.
+- "makes start idempotent and cancels every delayed write on relock" found no auth lifecycle/cancellation.
+
+Implemented:
+- ConnectPage canonicalizes locally, rejects HTTPS->HTTP locally, persists only exact non-secret origin/recent host via api.ts, then reloads. It has no fetch.
+- Store module evaluation performs local Zustand hydration only; no backend request/timer while unauthenticated.
+- Browser credential transitions start sync exactly once and stop it on relock.
+- Stop aborts in-flight store requests, cancels both delayed-write timers, clears pending state, and prevents stale prior-generation GET completions from mutating state after re-auth.
+- Migration inventory now pins the sole credential-free Config candidate probe.
+
+Evidence:
+- Authored changed lines: 151 or fewer (well below 250; excludes STATUS/.omx/lockfiles).
+- Focused tests green twice: 4 pass, 26 expectations each; identical named results.
+- npx tsc --noEmit: pass.
+- bun test: 156 pass, 490 expectations.
+- bun run build: pass, 171 modules transformed.
+- git diff --check: pass.
+
+SHIPPED
+- A1 commit fc3ff3f, PR https://github.com/Soul-Brews-Studio/maw-ui/pull/108
+  frozen diff a98f57482807d31042a72e682c81521ff2f463ee82978b0aff2039de6c9322fb
+- A2 commit 93a374e, PR https://github.com/Soul-Brews-Studio/maw-ui/pull/109
+  frozen diff 3b1775de523b7e6b809da958a70aa61525584f2115d76d0c1624991c03b96620
+- Neither PR merged; issue left open.
