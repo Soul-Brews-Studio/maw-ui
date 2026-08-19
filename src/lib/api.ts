@@ -1,29 +1,5 @@
 /**
  * Centralized API host resolution — local.drizzle.studio pattern.
- *
- * Loaded from CF (local.buildwithoracle.com): user passes ?host=white.local:3456
- *   Server auto-detects mkcert and serves HTTPS (same as drizzle-kit).
- * Loaded locally (same origin): uses relative paths.
- *
- * The host param accepts THREE forms:
- *
- *   ?host=white.local:3456              → https://white.local:3456
- *                                         (bare host:port — defaults to https,
- *                                         backwards-compatible behavior)
- *
- *   ?host=https://white.local:3456      → https://white.local:3456
- *                                         (explicit https — same result)
- *
- *   ?host=http://oracle-world:3456      → http://oracle-world:3456
- *                                         (explicit http — needed for plain-HTTP
- *                                         maw-js nodes on the LAN, e.g. oracle-world
- *                                         where mkcert isn't deployed)
- *
- * Discovered the http:// gap during /lens smoke testing on 2026-04-11:
- * the v1.1 PR claimed "the lens reads any maw-js" but the apiUrl helper
- * hardcoded https://, so any HTTP-only node was unreachable. This restores
- * the claim. See ψ/memory/feedback_ground_before_proposing.md (claim drift —
- * incident #5 in the night's count).
  */
 
 const STORAGE_KEY = "maw-host";
@@ -54,19 +30,6 @@ export function canonicalizeBackendOrigin(
 
 const pageLocation = () => typeof window === "undefined" ? null : window.location;
 const storage = () => typeof localStorage === "undefined" ? null : localStorage;
-const params = new URLSearchParams(pageLocation()?.search ?? "");
-const urlHost = params.get("host");
-
-// Auto-persist: ?host= in URL → save to localStorage → redirect clean
-if (urlHost) {
-  canonicalizeBackendOrigin(urlHost, pageLocation()?.protocol ?? "http:");
-  storage()?.setItem(STORAGE_KEY, urlHost);
-  addRecentHost(urlHost);
-  const url = new URL(pageLocation()!.href);
-  url.searchParams.delete("host");
-  window.location.replace(url.toString());
-}
-
 let hostParam = storage()?.getItem(STORAGE_KEY) ?? null;
 
 function activeBackendOrigin(): string | null {
