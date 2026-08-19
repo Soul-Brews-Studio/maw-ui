@@ -75,6 +75,8 @@ function activeBackendOrigin(): string | null {
   catch { return null; }
 }
 
+export function getActiveBackendOrigin(): string | null { return activeBackendOrigin(); }
+
 type OperatorCredential = { exactOrigin: string; token: string; generation: number };
 export type OperatorAuthOutcome = "authenticated" | "unauthorized" | "forbidden" | "unavailable"
   | "invalid_response" | "aborted" | "stale";
@@ -302,6 +304,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     throw new Error("caller_auth_forbidden");
   }
   const requestCredential = operatorCredential?.exactOrigin === resolved.origin ? operatorCredential : null;
+  if (!requestCredential) throw new Error("operator_auth_required");
   const requestToken = requestCredential?.token ?? null;
   if (requestToken) suppliedHeaders.set("Authorization", `Bearer ${requestToken}`);
   const url = resolved.toString();

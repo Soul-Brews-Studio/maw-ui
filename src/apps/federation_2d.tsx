@@ -1,4 +1,3 @@
-import { createRoot } from "react-dom/client";
 import "../index.css";
 import { useFederationData } from "../hooks/useFederationData";
 import { useFederationStore } from "../components/federation/store";
@@ -9,7 +8,7 @@ import { machineColor } from "../components/federation/colors";
 
 const LAYOUTS = ["force", "circle"] as const;
 
-function App() {
+export default function App() {
   const { connected, mqttConnected } = useFederationData();
   const { machines, agents, edges, version, plugins, showLineage, toggleLineage, layout, setLayout, setGraph, particles, showHistoryEdges, node } = useFederationStore();
 
@@ -99,5 +98,3 @@ function App() {
     </div>
   );
 }
-
-createRoot(document.getElementById("root")!).render(<App />);

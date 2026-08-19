@@ -80,6 +80,11 @@ describe("operator API origin boundary", () => {
   });
 });
 describe("secure apiFetch", () => {
+  test("fails closed before network without a verified operator credential", async () => {
+    await expect(api.apiFetch("/api/config")).rejects.toThrow("operator_auth_required");
+    expect(calls).toHaveLength(0);
+    expect(api.getHttpHealth()).toEqual({ healthy: true, consecutiveFails: 0, openUntil: 0, lastError: null });
+  });
   test("attaches byte-exact Bearer only at the exact active origin", async () => {
     const token = "AbC_+/=.:~opaque";
     await install(token, "https://good.example");
@@ -92,8 +97,8 @@ describe("secure apiFetch", () => {
     expect(calls[0].init?.redirect).toBe("error");
     api.setStoredHost("https://good.example.evil");
     expect(api.hasOperatorCredential()).toBe(false);
-    await api.apiFetch("/api/config");
-    expect((calls[1].init?.headers as Headers).has("Authorization")).toBe(false);
+    await expect(api.apiFetch("/api/config")).rejects.toThrow("operator_auth_required");
+    expect(calls).toHaveLength(1);
   });
   test("host mutations clear credentials synchronously", async () => {
     await install("opaque-token", "https://future.example");
@@ -146,8 +151,9 @@ describe("secure apiFetch", () => {
   });
 
   test("keeps the five-failure circuit breaker", async () => {
+    await install("circuit-token");
     globalThis.fetch = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
-    for (let i = 0; i < 5; i++) await expect(api.apiFetch("/api/config")).rejects.toThrow("offline");
+    for (let i = 0; i < 5; i++) await expect(api.apiFetch("/api/config")).rejects.toThrow("api_fetch_failed");
     expect(api.getHttpHealth().healthy).toBe(false);
     await expect(api.apiFetch("/api/config")).rejects.toThrow("circuit_open");
   });
@@ -166,7 +172,7 @@ describe("verified credential lifecycle", () => {
     const controller = new AbortController();
     const pending = api.authenticateOperator(token, controller.signal);
     expect(api.hasOperatorCredential()).toBe(false);
-    await api.apiFetch("/api/config");
+    await expect(api.apiFetch("/api/config")).rejects.toThrow("operator_auth_required");
     const request = calls[0];
     expect(request.url).toBe("https://localhost:3456/api/auth/ws-ticket");
     expect(Object.fromEntries((request.init?.headers as Headers).entries())).toEqual({
@@ -177,7 +183,7 @@ describe("verified credential lifecycle", () => {
       method: "POST", body: '{"path":"/ws"}', credentials: "omit", redirect: "error",
       cache: "no-store", signal: controller.signal, targetAddressSpace: "loopback",
     });
-    expect((calls[1].init?.headers as Headers).has("Authorization")).toBe(false);
+    expect(calls).toHaveLength(1);
     gate.resolve(verified());
     expect(await pending).toBe("authenticated");
     expect(api.hasOperatorCredential()).toBe(true);

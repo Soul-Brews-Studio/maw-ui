@@ -439,8 +439,6 @@ export const ConfigView = memo(function ConfigView() {
 
         {/* Connection Settings */}
         <ConnectionSettings />
-        {/* PIN Settings */}
-        <PinSettings />
       </div>
 
       {/* Editor area */}

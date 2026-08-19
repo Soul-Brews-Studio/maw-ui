@@ -1,4 +1,3 @@
-import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "../index.css";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -65,7 +64,7 @@ function timeAgo(ts: number): string {
 
 // ─── App ───
 
-function App() {
+export default function App() {
   const [nodes, setNodes] = useState<Record<string, Node>>({});
   const [statuses, setStatuses] = useState<Record<string, PaneStatus>>({});
   const [feed, setFeed] = useState<(FeedEvent & { _node?: string })[]>([]);
@@ -486,6 +485,3 @@ function StatRow({ label, count, color, status, onClick, active }: {
     </div>
   );
 }
-
-// ─── Mount ───
-createRoot(document.getElementById("root")!).render(<App />);

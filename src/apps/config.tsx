@@ -1,9 +1,8 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { ConfigView } from "../components/ConfigView";
 
-mount(() => (
+export default () => (
   <AppShell view="config" fullHeight>
     {() => <ConfigView />}
   </AppShell>
-));
+);

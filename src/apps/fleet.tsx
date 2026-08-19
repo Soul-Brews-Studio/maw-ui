@@ -1,8 +1,7 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { FleetGrid } from "../components/FleetGrid";
 
-mount(() => (
+export default () => (
   <AppShell view="fleet">
     {(ctx) => (
       <FleetGrid
@@ -19,4 +18,4 @@ mount(() => (
       />
     )}
   </AppShell>
-));
+);

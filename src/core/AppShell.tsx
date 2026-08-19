@@ -1,6 +1,6 @@
 /**
  * AppShell — shared layout for all standalone apps.
- * Provides: WebSocket connection, StatusBar, error boundary, PIN lock.
+ * Provides: WebSocket connection, StatusBar, error boundary.
  * Each app mounts its view inside this shell.
  */
 import { type ReactNode, useCallback, useEffect } from "react";
@@ -9,7 +9,6 @@ import { useSessions } from "../hooks/useSessions";
 import { useFleetStore } from "../lib/store";
 import { StatusBar } from "../components/StatusBar";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { PinLock } from "../components/PinLock";
 import { setSoundMuted } from "../lib/sounds";
 import type { AgentState } from "../lib/types";
 
@@ -65,7 +64,6 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
 
   return (
     <ErrorBoundary>
-      <PinLock>
         <div className={wrapperClass} style={{ background: "#020208" }}>
           <div className={`relative z-10${fullHeight ? " flex-shrink-0" : ""}`}>
             <StatusBar
@@ -107,7 +105,6 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
             </div>
           )}
         </div>
-      </PinLock>
     </ErrorBoundary>
   );
 }

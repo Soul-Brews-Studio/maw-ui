@@ -1,8 +1,7 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { MissionControl } from "../components/MissionControl";
 
-mount(() => (
+export default () => (
   <AppShell view="mission">
     {(ctx) => (
       <MissionControl
@@ -17,4 +16,4 @@ mount(() => (
       />
     )}
   </AppShell>
-));
+);
