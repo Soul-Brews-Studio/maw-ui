@@ -48,4 +48,24 @@ describe("selected-backend HTTP source inventory", () => {
     }
     expect(rawFetches(source("src/components/ConnectPage.tsx"))).toHaveLength(0);
   });
+
+  test("never re-introduces a ?host= URL consumer in api.ts (credential-exfil via attacker-named origin)", () => {
+    const text = source("src/lib/api.ts");
+    // #111: an import-time `?host=` consumer let an attacker choose where the
+    // operator token gets sent (auth.ts POSTs Authorization: Bearer <token>
+    // to activeBackendOrigin(), which read straight from this parameter).
+    // Every host selection must come from a deliberate human form submission
+    // (ConnectPage / ConfigView / the operator gate's "Change host" form),
+    // never from parsing the URL.
+    expect(text).not.toMatch(/URLSearchParams/);
+    expect(text).not.toMatch(/params\.get\(\s*["']host["']\s*\)/);
+    expect(text).not.toMatch(/location\.replace/);
+  });
+
+  test("setStoredHost persists only the canonicalized exact origin, never raw input", () => {
+    const text = source("src/lib/api.ts");
+    const fn = text.slice(text.indexOf("export function setStoredHost"), text.indexOf("\n}", text.indexOf("export function setStoredHost")));
+    expect(fn).toContain("next.exactOrigin");
+    expect(fn).not.toMatch(/setItem\(STORAGE_KEY,\s*host\)/);
+  });
 });

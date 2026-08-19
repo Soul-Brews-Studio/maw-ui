@@ -134,9 +134,9 @@ export function getStoredHost(): string | null {
 export function setStoredHost(host: string): void {
   const next = canonicalizeBackendOrigin(host, pageLocation()?.protocol ?? "http:");
   clearOperatorCredential();
-  hostParam = host;
-  storage()?.setItem(STORAGE_KEY, host);
-  addRecentHost(host);
+  hostParam = next.exactOrigin;
+  storage()?.setItem(STORAGE_KEY, next.exactOrigin);
+  addRecentHost(next.exactOrigin);
 }
 
 /** Clear stored host (revert to local) */
