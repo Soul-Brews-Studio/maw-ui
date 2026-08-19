@@ -9,6 +9,7 @@ import { useFleetStore } from "../lib/store";
 import { useFeedStatusStore } from "../lib/feedStatusStore";
 import { usePreviewStore } from "../lib/previewStore";
 import { activeOracles, type FeedEvent, type FeedEventType } from "../lib/feed";
+import { acceptFeedEvent } from "../lib/feedEventOrder";
 import type { AskType } from "../lib/types";
 
 const BUSY_TIMEOUT = 15_000; // 15s without feed → ready
@@ -60,6 +61,7 @@ export function useSessions() {
   // target → last feed timestamp, target → last event type
   const feedLastSeen = useRef<Record<string, number>>({});
   const feedLastEvent = useRef<Record<string, FeedEventType>>({});
+  const latestFeedEventTs = useRef<Record<string, number>>({});
 
   const FEED_BUSY_EVENTS = new Set<FeedEventType>(["PreToolUse", "PostToolUse", "UserPromptSubmit", "SubagentStart", "PostToolUseFailure"]);
   const FEED_STOP_EVENTS = new Set<FeedEventType>(["Stop", "SessionEnd", "TaskCompleted", "Notification"]);
@@ -86,6 +88,10 @@ export function useSessions() {
     if (!agent) return;
 
     const target = agent.target;
+    // A reconnect replays feed-history after live events may already have
+    // arrived. Never let an older Stop/Notification regress a current busy
+    // agent and remove its ON STAGE avatar.
+    if (!acceptFeedEvent(latestFeedEventTs.current, target, event.ts)) return;
     const { setStatus, getStatus } = useFeedStatusStore.getState();
 
     feedLastEvent.current[target] = event.event;
