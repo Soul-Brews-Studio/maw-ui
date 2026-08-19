@@ -1,8 +1,7 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { OverviewGrid } from "../components/OverviewGrid";
 
-mount(() => (
+export default () => (
   <AppShell view="overview">
     {(ctx) => (
       <OverviewGrid
@@ -14,4 +13,4 @@ mount(() => (
       />
     )}
   </AppShell>
-));
+);

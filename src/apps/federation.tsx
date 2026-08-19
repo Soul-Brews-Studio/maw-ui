@@ -1,4 +1,3 @@
-import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { isVisible } from "../lib/visibility";
 import * as THREE from "three";
@@ -154,7 +153,7 @@ interface Supernova {
 
 // ─── App ───
 
-function App() {
+export default function App() {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<{
     scene: THREE.Scene;
@@ -1209,5 +1208,3 @@ function App() {
     </div>
   );
 }
-
-createRoot(document.getElementById("root")!).render(<App />);

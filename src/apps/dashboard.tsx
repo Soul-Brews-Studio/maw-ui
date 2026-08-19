@@ -1,8 +1,7 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { DashboardView } from "../components/DashboardView";
 
-mount(() => (
+export default () => (
   <AppShell view="dashboard">
     {(ctx) => (
       <DashboardView
@@ -18,4 +17,4 @@ mount(() => (
       />
     )}
   </AppShell>
-));
+);

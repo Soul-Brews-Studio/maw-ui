@@ -1,9 +1,8 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { UniverseBg } from "../components/UniverseBg";
 import { RoomGrid } from "../components/RoomGrid";
 
-mount(() => (
+export default () => (
   <AppShell view="office">
     {(ctx) => (
       <>
@@ -14,4 +13,4 @@ mount(() => (
       </>
     )}
   </AppShell>
-));
+);

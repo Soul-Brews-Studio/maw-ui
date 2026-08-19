@@ -1,4 +1,3 @@
-import { mount } from "../core/mount";
 import { AppShell, type AppContext } from "../core/AppShell";
 import { useFleetStore } from "../lib/store";
 import { agentColor } from "../lib/constants";
@@ -114,8 +113,8 @@ function InboxContent({ send }: { send: (msg: object) => void }) {
   );
 }
 
-mount(() => (
+export default () => (
   <AppShell view="inbox">
     {(ctx) => <InboxContent send={ctx.send} />}
   </AppShell>
-));
+);

@@ -1,8 +1,7 @@
-import { mount } from "../core/mount";
 import { AppShell } from "../core/AppShell";
 import { TerminalView } from "../components/TerminalView";
 
-mount(() => (
+export default () => (
   <AppShell view="terminal" fullHeight>
     {(ctx) => (
       <TerminalView
@@ -13,4 +12,4 @@ mount(() => (
       />
     )}
   </AppShell>
-));
+);
