@@ -120,6 +120,22 @@ describe("secure apiFetch", () => {
     expect(JSON.stringify(api.getHttpHealth())).not.toContain(token);
   });
 
+  test("redacts caller aborts without affecting credentials or the circuit", async () => {
+    const token = "abort-secret-token";
+    api.setOperatorCredential("https://ui.example", token);
+    globalThis.fetch = (async () => {
+      throw new DOMException(`cancelled ${token}`, "AbortError");
+    }) as unknown as typeof fetch;
+    for (let i = 0; i < 6; i++) {
+      const thrown = await api.apiFetch("/api/oracle/search").catch(error => error);
+      expect(thrown.name).toBe("AbortError");
+      expect(thrown.message).toBe("request_aborted");
+      expect(thrown.cause).toBeUndefined();
+    }
+    expect(api.hasOperatorCredential()).toBe(true);
+    expect(api.getHttpHealth()).toEqual({ healthy: true, consecutiveFails: 0, openUntil: 0, lastError: null });
+  });
+
   test("keeps the five-failure circuit breaker", async () => {
     globalThis.fetch = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
     for (let i = 0; i < 5; i++) await expect(api.apiFetch("/api/config")).rejects.toThrow("offline");

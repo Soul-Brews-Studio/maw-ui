@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { type MawLogEntry, formatDate, pairKey } from "./types";
-import { apiUrl, wsUrl } from "../../lib/api";
+import { apiFetch, wsUrl } from "../../lib/api";
 
 // /api/feed event shape — public federation API v1 (maw-js src/api/feed.ts).
 // Chat view consumes this since /api/maw-log was rotated to 410 Gone
@@ -48,7 +48,7 @@ export function useChatLog(mode: string) {
   useEffect(() => {
     setLoading(true);
     setSourceError(null);
-    fetch(apiUrl("/api/feed?limit=200"))
+    apiFetch("/api/feed?limit=200")
       .then(async (r) => {
         if (r.status === 410) {
           const body = await r.json().catch(() => ({}));

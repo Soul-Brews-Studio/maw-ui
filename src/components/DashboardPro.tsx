@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiUrl, isRemote } from "../lib/api";
+import { apiFetch, isRemote } from "../lib/api";
 import { isVisible } from "../lib/visibility";
 import { useWebSocket } from "../hooks/useWebSocket";
 
@@ -82,9 +82,9 @@ function useDashboardData() {
 
   const refresh = useCallback(async () => {
     const [fedRes, plugRes, sessRes] = await Promise.allSettled([
-      fetch(apiUrl("/api/federation/status")).then((r) => (r.ok ? r.json() : null)),
-      fetch(apiUrl("/api/plugins")).then((r) => (r.ok ? r.json() : null)),
-      fetch(apiUrl("/api/sessions")).then((r) => (r.ok ? r.json() : null)),
+      apiFetch("/api/federation/status").then((r) => (r.ok ? r.json() : null)),
+      apiFetch("/api/plugins").then((r) => (r.ok ? r.json() : null)),
+      apiFetch("/api/sessions").then((r) => (r.ok ? r.json() : null)),
     ]);
     if (fedRes.status === "fulfilled" && fedRes.value) setFed(fedRes.value);
     if (plugRes.status === "fulfilled" && plugRes.value) setPlugins(plugRes.value);
@@ -174,7 +174,7 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
   const wakeAgent = async (name: string) => {
     setActing(name);
     try {
-      await fetch(apiUrl("/api/wake"), {
+      await apiFetch("/api/wake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: name }),
@@ -187,7 +187,7 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
   const sleepAgent = async (name: string) => {
     setActing(name);
     try {
-      await fetch(apiUrl("/api/sleep"), {
+      await apiFetch("/api/sleep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: name }),
