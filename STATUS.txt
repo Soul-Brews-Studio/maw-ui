@@ -1,0 +1,9 @@
+DONE — issue #91 shipped without merge.
+Commit: 7b2d6c30f303249f5f652da28038287be74ab503
+PR: https://github.com/Soul-Brews-Studio/maw-ui/pull/94 (base main, OPEN)
+Change: .gitignore adds .envrc (1 authored line).
+.envrc confirmed not tracked and absent from git status.
+Red: NAMED FAILURE issue91_envrc_ignored captured on untouched base.
+Green twice: deterministic output identical via cmp.
+Gates twice: npx tsc --noEmit; bun test (152 pass); bun run build.
+Frozen staged diff hash before commit: 7187d61640fb0676250f974861a7c85d91c7c426758a776d212faa7234287b80
