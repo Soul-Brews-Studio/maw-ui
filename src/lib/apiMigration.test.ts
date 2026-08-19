@@ -35,9 +35,8 @@ describe("selected-backend HTTP source inventory", () => {
     expect(rawFetches(shipped)).toHaveLength(1);
   });
 
-  test("keeps exactly two credential-free candidate /api/config probes raw", () => {
+  test("keeps exactly one post-auth candidate /api/config probe raw", () => {
     const probes = [
-      ["src/components/ConnectPage.tsx", "`${normalized}/api/config`"],
       ["src/components/ConfigView.tsx", "`${base}/api/config`"],
     ] as const;
     for (const [file, target] of probes) {

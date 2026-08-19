@@ -1,4 +1,5 @@
 import { memo, useState, useEffect } from "react";
+import { canonicalizeBackendOrigin, setStoredHost } from "../lib/api";
 
 const STORAGE_KEY = "maw-recent-hosts";
 const MAX_RECENT = 5;
@@ -15,6 +16,17 @@ function saveHost(host: string) {
   const recent = getRecentHosts().filter((h) => h !== host);
   recent.unshift(host);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+}
+
+export function selectBackendHost(input: string, protocol: string, persist: (origin: string) => void,
+  reload: () => void): "selected" | "invalid" | "mixed" {
+  try {
+    const selected = canonicalizeBackendOrigin(input, protocol);
+    if (selected.mixedContent) return "mixed";
+    persist(selected.exactOrigin);
+    reload();
+    return "selected";
+  } catch { return "invalid"; }
 }
 
 /**
@@ -37,37 +49,18 @@ export const ConnectPage = memo(function ConnectPage() {
     setRecent(getRecentHosts());
   }, []);
 
-  const connect = async (target: string) => {
+  const connect = (target: string) => {
     const trimmed = target.trim();
     if (!trimmed) return;
 
     setTesting(true);
     setError("");
 
-    // Normalize: add http:// if no protocol
-    const normalized = trimmed.match(/^https?:\/\//) ? trimmed : `http://${trimmed}`;
-
-    try {
-      const res = await fetch(`${normalized}/api/config`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json();
-      if (!data.node) throw new Error("not a maw-js node");
-
-      // Success — save + redirect
-      saveHost(normalized);
-      const currentHash = window.location.hash || "#office";
-      window.location.href = `${window.location.pathname}?host=${encodeURIComponent(normalized)}${currentHash}`;
-    } catch (e: any) {
-      setError(
-        e.name === "TimeoutError"
-          ? "Connection timed out — is the address correct?"
-          : e.message?.includes("Failed to fetch")
-            ? "Can't reach that address — check the URL and try again"
-            : `Connection failed: ${e.message}`,
-      );
-    } finally {
+    const result = selectBackendHost(trimmed, window.location.protocol,
+      origin => { setStoredHost(origin); saveHost(origin); }, () => window.location.reload());
+    if (result !== "selected") {
+      setError(result === "mixed" ? "HTTPS cannot connect to an HTTP backend."
+        : "Enter a valid HTTP or HTTPS backend origin.");
       setTesting(false);
     }
   };
@@ -99,6 +92,8 @@ export const ConnectPage = memo(function ConnectPage() {
               border: `1px solid ${error ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.1)"}`,
             }}
             autoFocus
+            autoComplete="off"
+            spellCheck={false}
             disabled={testing}
           />
           <button

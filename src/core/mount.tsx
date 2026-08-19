@@ -1,8 +1,11 @@
 /** Shared mount helper — each app calls this with its view component */
 import type { ReactElement } from "react";
-import { createRoot } from "react-dom/client";
-import "../index.css";
+import { createRoot, type Root } from "react-dom/client";
 
-export function mount(App: () => ReactElement) {
-  createRoot(document.getElementById("root")!).render(<App />);
+let root: Root | undefined;
+
+export function mount(App: () => ReactElement | null) {
+  root ??= createRoot(document.getElementById("root")!);
+  root.render(<App />);
+  return root;
 }

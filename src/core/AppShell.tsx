@@ -9,7 +9,6 @@ import { useSessions } from "../hooks/useSessions";
 import { useFleetStore } from "../lib/store";
 import { StatusBar } from "../components/StatusBar";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { PinLock } from "../components/PinLock";
 import { setSoundMuted } from "../lib/sounds";
 import type { AgentState } from "../lib/types";
 
@@ -64,8 +63,7 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
 
   return (
     <ErrorBoundary>
-      <PinLock>
-        <div className={wrapperClass} style={{ background: "#020208" }}>
+      <div className={wrapperClass} style={{ background: "#020208" }}>
           <div className={`relative z-10${fullHeight ? " flex-shrink-0" : ""}`}>
             <StatusBar
               connected={connected}
@@ -97,8 +95,7 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
               </div>
             </div>
           )}
-        </div>
-      </PinLock>
+      </div>
     </ErrorBoundary>
   );
 }

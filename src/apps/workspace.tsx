@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { mount } from "../core/mount";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import "../index.css";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -488,4 +488,4 @@ function StatRow({ label, count, color, status, onClick, active }: {
 }
 
 // ─── Mount ───
-createRoot(document.getElementById("root")!).render(<App />);
+mount(App);

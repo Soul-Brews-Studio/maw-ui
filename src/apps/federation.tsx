@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { mount } from "../core/mount";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { isVisible } from "../lib/visibility";
 import * as THREE from "three";
@@ -1210,4 +1210,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+mount(App);

@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { mount } from "../core/mount";
 import "../index.css";
 import { useFederationData } from "../hooks/useFederationData";
 import { useFederationStore } from "../components/federation/store";
@@ -100,4 +100,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+mount(App);

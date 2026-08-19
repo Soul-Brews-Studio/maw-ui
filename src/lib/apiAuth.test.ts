@@ -92,8 +92,9 @@ describe("secure apiFetch", () => {
     expect(calls[0].init?.redirect).toBe("error");
     api.setStoredHost("https://good.example.evil");
     expect(api.hasOperatorCredential()).toBe(false);
-    await api.apiFetch("/api/config");
-    expect((calls[1].init?.headers as Headers).has("Authorization")).toBe(false);
+    await expect(api.apiFetch("/api/config")).rejects.toThrow("operator_credential_required");
+    expect(api.getHttpHealth()).toEqual({ healthy: true, consecutiveFails: 0, openUntil: 0, lastError: null });
+    expect(calls).toHaveLength(1);
   });
   test("host mutations clear credentials synchronously", async () => {
     await install("opaque-token", "https://future.example");
@@ -146,8 +147,9 @@ describe("secure apiFetch", () => {
   });
 
   test("keeps the five-failure circuit breaker", async () => {
+    await install("breaker-token");
     globalThis.fetch = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
-    for (let i = 0; i < 5; i++) await expect(api.apiFetch("/api/config")).rejects.toThrow("offline");
+    for (let i = 0; i < 5; i++) await expect(api.apiFetch("/api/config")).rejects.toThrow("api_fetch_failed");
     expect(api.getHttpHealth().healthy).toBe(false);
     await expect(api.apiFetch("/api/config")).rejects.toThrow("circuit_open");
   });
@@ -166,7 +168,7 @@ describe("verified credential lifecycle", () => {
     const controller = new AbortController();
     const pending = api.authenticateOperator(token, controller.signal);
     expect(api.hasOperatorCredential()).toBe(false);
-    await api.apiFetch("/api/config");
+    await expect(api.apiFetch("/api/config")).rejects.toThrow("operator_credential_required");
     const request = calls[0];
     expect(request.url).toBe("https://localhost:3456/api/auth/ws-ticket");
     expect(Object.fromEntries((request.init?.headers as Headers).entries())).toEqual({
@@ -177,7 +179,7 @@ describe("verified credential lifecycle", () => {
       method: "POST", body: '{"path":"/ws"}', credentials: "omit", redirect: "error",
       cache: "no-store", signal: controller.signal, targetAddressSpace: "loopback",
     });
-    expect((calls[1].init?.headers as Headers).has("Authorization")).toBe(false);
+    expect(calls).toHaveLength(1);
     gate.resolve(verified());
     expect(await pending).toBe("authenticated");
     expect(api.hasOperatorCredential()).toBe(true);
@@ -262,12 +264,16 @@ describe("verified credential lifecycle", () => {
     oldRequest.resolve(new Response("ignored", { status: 401 }));
     expect((await stale401).status).toBe(401);
     expect(api.hasOperatorCredential()).toBe(true);
+    globalThis.fetch = (async () => new Response("ignored", { status: 401 })) as unknown as typeof fetch;
+    expect((await api.apiFetch("/api/config")).status).toBe(401);
+    expect(api.hasOperatorCredential()).toBe(false);
   });
   test("rejects mixed content before fetch and ignores legacy unlock storage", async () => {
     stored.set("office-unlocked", "1");
     api.setStoredHost("http://backend.example:3456");
     expect(api.hasOperatorCredential()).toBe(false);
     expect(await api.authenticateOperator("candidate")).toBe("invalid_response");
+    await expect(api.apiFetch("/api/config")).rejects.toThrow("operator_credential_required");
     expect(calls).toHaveLength(0);
   });
 });
