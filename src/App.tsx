@@ -173,10 +173,11 @@ function useAudioUnlock() {
 }
 
 /** Shared layout — StatusBar + overlays rendered once for all views */
-function Layout({ activeView, connected, reconnecting, agentCount, sessionCount, tabCount, askCount, muted, onToggleMute, onJump, onInbox, statusBarChildren, terminalModal, showShortcuts, onCloseShortcuts, jumpOverlay, inboxOverlay, broadcastModal, fullHeight, children }: {
+function Layout({ activeView, connected, reconnecting, serverError, agentCount, sessionCount, tabCount, askCount, muted, onToggleMute, onJump, onInbox, statusBarChildren, terminalModal, showShortcuts, onCloseShortcuts, jumpOverlay, inboxOverlay, broadcastModal, fullHeight, children }: {
   activeView: string;
   connected: boolean;
   reconnecting?: boolean;
+  serverError?: string | null;
   agentCount: number;
   sessionCount: number;
   tabCount?: number;
@@ -238,29 +239,35 @@ function Layout({ activeView, connected, reconnecting, agentCount, sessionCount,
       <FloatingButtons />
 
       {/* Self-healing banner — stale remote host */}
-      {stale && (
+      {(serverError || stale) && (
         <div className="fixed top-0 inset-x-0 z-[9999] flex justify-center pt-3 px-4 pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-lg max-w-2xl" style={{ background: "rgba(20,5,5,0.92)", border: "1px solid rgba(239,68,68,0.4)" }}>
             <span className="text-lg">⚠️</span>
             <div className="flex-1 min-w-0">
               <p className="font-mono text-xs" style={{ color: "#fca5a5" }}>
-                {!httpHealth.healthy
+                {serverError
+                  ? <>Live data is stale</>
+                  : !httpHealth.healthy
                   ? <>Requests blocked — <span className="font-bold">{activeHost}</span></>
                   : <>Can't reach <span className="font-bold">{activeHost}</span></>}
               </p>
               <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-                {!httpHealth.healthy
+                {serverError
+                  ? serverError
+                  : !httpHealth.healthy
                   ? <>Circuit open after {httpHealth.consecutiveFails} failures ({httpHealth.lastError || "network"}). Chrome PNA may be blocking HTTP→LAN — try https:// or change host.</>
                   : <>Host unreachable from this network. Disconnect to pick another, or check the LAN.</>}
               </p>
             </div>
-            <button
-              onClick={onDisconnect}
-              className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:brightness-125 active:scale-95"
-              style={{ background: "rgba(239,68,68,0.2)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.4)" }}
-            >
-              Disconnect
-            </button>
+            {stale && (
+              <button
+                onClick={onDisconnect}
+                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:brightness-125 active:scale-95"
+                style={{ background: "rgba(239,68,68,0.2)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.4)" }}
+              >
+                Disconnect
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -348,7 +355,7 @@ export function App() {
     return () => window.removeEventListener("keydown", handler, true);
   }, []);
 
-  const { sessions, agents, eventLog, addEvent, handleMessage, feedEvents, feedActive, agentFeedLog, teams } = useSessions();
+  const { sessions, agents, eventLog, addEvent, handleMessage, feedEvents, feedActive, agentFeedLog, teams, serverError } = useSessions();
 
   // Source filter: all / local / remote (synced via CustomEvent from FloatingButtons)
   const [sourceFilter, setSourceFilter] = useState<"all" | "local" | "remote">(() => (localStorage.getItem("office-source-filter") as any) || "all");
@@ -457,6 +464,7 @@ export function App() {
   const layoutProps = {
     connected,
     reconnecting,
+    serverError,
     agentCount: filteredAgents.length,
     sessionCount: sessions.length,
     tabCount: sessions.reduce((sum, s) => sum + s.windows.length, 0),
