@@ -30,6 +30,7 @@ import { LoadingSkeleton } from "./components/LoadingSkeleton";
 import { ShortcutOverlay } from "./components/ShortcutOverlay";
 import { JumpOverlay } from "./components/JumpOverlay";
 import { OracleSearch } from "./components/OracleSearch";
+import { useDevice } from "./hooks/useDevice";
 import { unlockAudio, isAudioUnlocked, setSoundMuted, SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound } from "./lib/sounds";
 
 function FloatingButtons() {
@@ -295,7 +296,9 @@ export function App() {
 
   const rawRoute = useHashRoute();
   const { view: route, agentName: hashAgent } = parseHash(rawRoute);
+  const { isNarrow } = useDevice();
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
+  const [hashTerminalTarget, setHashTerminalTarget] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showJump, setShowJump] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
@@ -374,11 +377,15 @@ export function App() {
     if (lastResolvedAgent.current === hashAgent) return;
     const name = hashAgent.toLowerCase();
     const match = agents.find(a => a.name.toLowerCase() === name);
-    if (match) {
+    if (match && route === "terminal" && !isNarrow) {
+      setHashTerminalTarget(match.target);
+      setSelectedAgent(null);
+      lastResolvedAgent.current = hashAgent;
+    } else if (match) {
       setSelectedAgent(match);
       lastResolvedAgent.current = hashAgent;
     }
-  }, [agents, hashAgent]);
+  }, [agents, hashAgent, route, isNarrow]);
 
   // Close terminal when hash loses the agent part (e.g. browser back).
   // Uses a ref guard to avoid racing with onSelectAgent: the hashchange
@@ -552,7 +559,7 @@ export function App() {
   if (route === "terminal") {
     return (
       <Layout activeView="terminal" {...layoutProps} fullHeight>
-        <TerminalView sessions={sessions} agents={agents} connected={connected} onSelectAgent={onSelectAgent} />
+        <TerminalView sessions={sessions} agents={agents} connected={connected} onSelectAgent={onSelectAgent} initialTarget={hashTerminalTarget} />
       </Layout>
     );
   }

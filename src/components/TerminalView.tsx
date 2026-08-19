@@ -10,9 +10,10 @@ interface TerminalViewProps {
   agents: AgentState[];
   connected: boolean;
   onSelectAgent: (agent: AgentState) => void;
+  initialTarget?: string | null;
 }
 
-export const TerminalView = memo(function TerminalView({ sessions, agents, connected, onSelectAgent }: TerminalViewProps) {
+export const TerminalView = memo(function TerminalView({ sessions, agents, connected, onSelectAgent, initialTarget }: TerminalViewProps) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [captureHtml, setCaptureHtml] = useState("");
   const [inputBuf, setInputBuf] = useState("");
@@ -82,6 +83,14 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
     setSendQueue([]);
     termRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!initialTarget || initialTarget === selectedTarget) return;
+    const exists = sessions.some(session =>
+      session.windows.some(window => `${session.name}:${window.index}` === initialTarget)
+    );
+    if (exists) selectWindow(initialTarget);
+  }, [initialTarget, selectedTarget, sessions, selectWindow]);
 
   // Flush send queue
   useEffect(() => {
