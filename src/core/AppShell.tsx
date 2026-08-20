@@ -7,6 +7,8 @@ import { type ReactNode, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useHttpHealth } from "../hooks/useHttpHealth";
 import { wsRefusalNotice } from "../lib/wsRefusalNotice";
+import { InlineOperatorAuth } from "../components/InlineOperatorAuth";
+import { OPEN_MODE } from "../lib/api";
 import { useSessions } from "../hooks/useSessions";
 import { useFleetStore } from "../lib/store";
 import { StatusBar } from "../components/StatusBar";
@@ -94,6 +96,7 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
                 <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
                   {refusalVisible ? wsRefusalNotice().detail : serverError}
                 </p>
+                {refusalVisible && OPEN_MODE && <InlineOperatorAuth />}
               </div>
             </div>
           )}

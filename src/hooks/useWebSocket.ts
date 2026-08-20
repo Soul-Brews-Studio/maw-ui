@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { openWs } from "../lib/api";
+import { openWs, subscribeOperatorCredential, hasOperatorCredential } from "../lib/api";
 
 type MessageHandler = (data: any) => void;
 
@@ -73,8 +73,22 @@ export function useWebSocket(onMessage: MessageHandler) {
     }
 
     run();
+
+    // A credential arriving mid-backoff is exactly the case worth reacting to:
+    // the operator just authenticated in response to the refusal banner, so the
+    // next attempt can actually succeed. Waiting out an exponential delay here
+    // would make the fix look broken.
+    const unsubscribe = subscribeOperatorCredential(() => {
+      if (!alive || !hasOperatorCredential()) return;
+      clearTimeout(reconnectTimer);
+      attempt = 0;
+      wsRef.current?.close();
+      run();
+    });
+
     return () => {
       alive = false;
+      unsubscribe();
       clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };

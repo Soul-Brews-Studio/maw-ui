@@ -1,6 +1,8 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { wsRefusalNotice } from "./lib/wsRefusalNotice";
+import { InlineOperatorAuth } from "./components/InlineOperatorAuth";
+import { OPEN_MODE } from "./lib/api";
 import { useSessions } from "./hooks/useSessions";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UniverseBg } from "./components/UniverseBg";
@@ -267,6 +269,8 @@ function Layout({ activeView, connected, reconnecting, serverError, wsRefused, a
                   ? <>Circuit open after {httpHealth.consecutiveFails} failures ({httpHealth.lastError || "network"}). Chrome PNA may be blocking HTTP→LAN — try https:// or change host.</>
                   : <>Host unreachable from this network. Disconnect to pick another, or check the LAN.</>}
               </p>
+              {/* Refusal is the one banner state the operator can fix in place. */}
+              {refusalVisible && OPEN_MODE && <InlineOperatorAuth />}
             </div>
             {stale && (
               <button

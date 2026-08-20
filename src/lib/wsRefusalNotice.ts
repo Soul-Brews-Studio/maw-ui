@@ -22,12 +22,12 @@ export interface RefusalNotice {
 export function wsRefusalNotice(openMode: boolean = OPEN_MODE): RefusalNotice {
   if (openMode) {
     return {
-      title: "Backend refuses this build's live connection",
+      title: "This backend requires an operator token",
       detail:
-        "HTTP works, but the backend rejects every WebSocket upgrade. This build ships " +
-        "without operator auth, so it cannot obtain the one-use ticket maw serve requires " +
-        "(maw-rs v26.8.18+). Fix: run maw serve with a token and use the gated build, or " +
-        "downgrade maw serve below v26.8.18.",
+        "HTTP works, but the backend rejects every WebSocket upgrade — maw-rs v26.8.18+ " +
+        "requires a one-use ticket, which needs a credential. Enter your operator token " +
+        "below to connect. (Alternatively: run maw serve below v26.8.18, which does not " +
+        "require one.)",
     };
   }
   return {

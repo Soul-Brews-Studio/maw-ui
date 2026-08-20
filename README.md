@@ -12,7 +12,8 @@ maw ui --install
 maw ui --dev
 
 # Option C: Hosted
-# https://god.buildwithoracle.com/federation_2d?host=<your-node>
+# https://god.buildwithoracle.com/federation_2d
+# (pick the backend from the Config page — ?host= was removed, see Backend compatibility)
 ```
 
 ## What's Inside
@@ -32,18 +33,84 @@ maw ui --dev
 | Inbox | `inbox.html` | Oracle inbox — messages + handoffs |
 | Workspace | `workspace.html` | Multi-agent workspace with send/action |
 
+## Backend compatibility (maw-rs versions)
+
+**Short answer: build with `VITE_OPEN_MODE=1` and it works against every version.**
+
+maw-rs `v26.8.18` changed how browsers connect. Browsers always send an `Origin` header, and from
+that version every Origin-bearing WebSocket upgrade must carry a one-use ticket — which requires an
+operator token on the daemon. HTTP is unaffected, so a mismatch fails in a confusing way: the page
+loads, shows a LIVE badge and correct agent counts, and never populates.
+
+| maw serve version | browser WebSocket | what you need |
+|---|---|---|
+| **< v26.8.18** | accepted unauthenticated | nothing — just works |
+| **>= v26.8.18**, no token configured | **refused** (401) | set a token, or run an older daemon |
+| **>= v26.8.18**, token configured | accepted with a ticket | enter the operator token when prompted |
+
+### Build modes
+
+```sh
+npm run build                    # gated: prompts for the operator token at startup
+VITE_OPEN_MODE=1 npm run build   # open: no startup gate, prompts only if the backend refuses
+```
+
+`VITE_OPEN_MODE` is a **build-time** flag — Vite statically replaces it, so the gate is compiled
+out entirely rather than toggled at runtime. It is never a runtime or server-reported signal: a
+server must never be able to talk the client out of authenticating.
+
+The open build is the compatible choice. Against an old daemon it never prompts; against a
+token-required daemon it detects the refusal, explains it, and offers an inline token field that
+reconnects on success — no rebuild, no reload.
+
+### Configuring a token on the daemon
+
+```jsonc
+// ~/.config/maw/maw.config.<weight>.json
+{ "serve": { "token": "op_…" } }        // persists across restarts
+```
+
+```sh
+MAW_SERVE_TOKEN="op_…" maw serve --port 3461   # or per-run via env
+```
+
+### If the UI is served from a non-loopback origin
+
+maw-rs hardcodes an allowlist of exactly one remote origin (`god.buildwithoracle.com`) plus any
+loopback origin. Anything else is refused with `403 origin-not-allowed` **before** auth is even
+considered. Add your own:
+
+```sh
+MAW_SERVE_ALLOWED_ORIGINS="https://your-ui.example" maw serve --port 3461
+```
+
+### Known upstream issues
+
+| issue | effect |
+|---|---|
+| [maw-rs#953](https://github.com/Soul-Brews-Studio/maw-rs/issues/953) | loopback origins (e.g. `vite dev`) still need a ticket — blocks local browser development |
+| [maw-rs#955](https://github.com/Soul-Brews-Studio/maw-rs/issues/955) | startup banner reports `auth: open` while refusing every browser client |
+
+> `maw update` follows the **alpha** channel by default, so a routine update can move a daemon
+> across the v26.8.18 boundary without that being an explicit decision. The UI now names the cause
+> when that happens rather than failing silently.
+
+
 ## Architecture
 
 - **State**: Zustand stores — agent status, terminal previews, fleet prefs
 - **Data**: WebSocket feed from maw-js backend (`:3456`) — real-time, no polling
-- **Routing**: `?host=<peer>` query param points any page at any maw-js node ([drizzle.studio pattern](https://local.drizzle.studio))
+- **Backend selection**: chosen in-app (Config page / operator gate) and stored locally.
+  The old `?host=` query param was **removed** — a link could otherwise choose where your
+  operator token was sent (credential exfiltration, maw-ui #111)
 - **Build**: Vite multi-page — each `.html` is a standalone entry point
 
 ## Client Helpers (`src/lib/`)
 
 | File | Purpose |
 |------|---------|
-| `api.ts` | `apiUrl()` / `wsUrl()` — centralized `?host=` resolution |
+| `api.ts` | Backend origin resolution, `apiFetch` (exact-origin + circuit breaker), `openWs()` / `mintWsTicket()` |
+| `capturePoller.ts` | One shared `/api/capture` scheduler for all consumers — dedupes, backs off, pauses on hidden tab |
 | `peerExecClient.ts` | Browser client for `POST /api/peer/exec` (signed command relay) |
 | `peerProxyClient.ts` | Browser client for `POST /api/proxy` (REST relay for HTTP-LAN peers) |
 | `peerConnection.ts` | Classify peer connectivity: same-origin / direct / mixed-content-blocked / invalid |
