@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { type MawLogEntry, formatDate, pairKey } from "./types";
-import { apiFetch, wsUrl } from "../../lib/api";
+import { apiFetch, openWs } from "../../lib/api";
 
 // /api/feed event shape — public federation API v1 (maw-js src/api/feed.ts).
 // Chat view consumes this since /api/maw-log was rotated to 410 Gone
@@ -83,10 +83,12 @@ export function useChatLog(mode: string) {
   // to keep per Principle 1 "Nothing is Deleted") and "feed" (the new type
   // emitted alongside FORGE's 410 rotation, if/when server pushes per-event).
   useEffect(() => {
-    const url = wsUrl("/ws");
     let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(url);
+    let alive = true;
+    // Ticket minting is async; guard against unmount while it is in flight.
+    openWs("/ws").then(socket => {
+      if (!alive) { socket.close(); return; }
+      ws = socket;
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
@@ -109,8 +111,8 @@ export function useChatLog(mode: string) {
           }
         } catch {}
       };
-    } catch {}
-    return () => { ws?.close(); };
+    }).catch(() => {});
+    return () => { alive = false; ws?.close(); };
   }, [mode]);
 
   return { entries, total, loading, sourceError, scrollRef };

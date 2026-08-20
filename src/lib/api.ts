@@ -144,6 +144,22 @@ export const WS_PROTOCOL = "maw.ws.v1";
  * unticketed" and let the server decide, rather than blocking the connection:
  * a maw-rs old enough to predate ticketing accepts an unticketed upgrade.
  */
+/**
+ * Open a WebSocket to `path`, carrying a fresh one-use ticket when we hold a
+ * verified operator credential.
+ *
+ * Every `/ws*` consumer must go through this rather than constructing a socket
+ * directly — a token-configured maw serve refuses any Origin-bearing upgrade
+ * that arrives without a ticket, and browsers always send Origin. The
+ * source-inventory test in apiMigration.test.ts enforces that.
+ */
+export async function openWs(path: string): Promise<WebSocket> {
+  const ticket = await mintWsTicket(path);
+  return ticket
+    ? new WebSocket(wsUrl(path), [WS_PROTOCOL, ticket])
+    : new WebSocket(wsUrl(path));
+}
+
 export async function mintWsTicket(path: string): Promise<string | null> {
   const credential = operatorCredential;
   if (!credential) return null;

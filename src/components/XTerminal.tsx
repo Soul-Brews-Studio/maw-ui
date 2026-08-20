@@ -2,7 +2,7 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { wsUrl } from "../lib/api";
+import { openWs } from "../lib/api";
 import type { AgentState } from "../lib/types";
 
 interface XTerminalProps {
@@ -93,6 +93,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
     term.loadAddon(fit);
 
     let ws: WebSocket | null = null;
+    let disposed = false;
     let dataSub: { dispose: () => void } | null = null;
     let binSub: { dispose: () => void } | null = null;
     let resizeTimer: ReturnType<typeof setTimeout>;
@@ -106,8 +107,11 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
         term.focus();
       } catch { return; }
 
-      // Connect to PTY WebSocket
-      ws = new WebSocket(wsUrl("/ws/pty"));
+      // Connect to PTY WebSocket. Ticket minting is async — `disposed` guards
+      // against the effect being torn down while the mint is still in flight.
+      openWs("/ws/pty").then(socket => {
+      if (disposed) { socket.close(); return; }
+      ws = socket;
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
 
@@ -141,6 +145,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
       ws.onclose = () => {
         term.write("\r\n\x1b[31m[connection closed]\x1b[0m\r\n");
       };
+      }).catch(() => {});
 
       if (!readOnly) {
         // Keystrokes → binary to PTY stdin
@@ -190,6 +195,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
     }, 50);
 
     return () => {
+      disposed = true;
       clearTimeout(openTimer);
       clearTimeout(resizeTimer);
       resizeObserver?.disconnect();

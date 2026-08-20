@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { wsUrl, mintWsTicket, WS_PROTOCOL } from "../lib/api";
+import { openWs } from "../lib/api";
 
 type MessageHandler = (data: any) => void;
 
@@ -37,11 +37,8 @@ export function useWebSocket(onMessage: MessageHandler) {
       // reconnect. A null ticket means "no verified credential" — open
       // unticketed and let the server decide, which keeps pre-ticketing
       // maw-rs builds working.
-      const ticket = await mintWsTicket("/ws");
-      if (!alive) return;
-      const ws = ticket
-        ? new WebSocket(wsUrl("/ws"), [WS_PROTOCOL, ticket])
-        : new WebSocket(wsUrl("/ws"));
+      const ws = await openWs("/ws");
+      if (!alive) { ws.close(); return; }
       wsRef.current = ws;
 
       ws.onopen = () => {

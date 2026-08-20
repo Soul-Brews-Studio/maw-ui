@@ -62,6 +62,25 @@ describe("selected-backend HTTP source inventory", () => {
     expect(text).not.toMatch(/location\.replace/);
   });
 
+  test("every /ws consumer goes through openWs, never a raw WebSocket constructor", () => {
+    // A token-configured maw serve refuses any Origin-bearing upgrade without a
+    // one-use ticket, and browsers always send Origin. api.ts owns the only
+    // legitimate `new WebSocket(` — anywhere else silently 401s at runtime.
+    // This caught /ws/pty, TerminalView and useChatLog being missed the first time.
+    const consumers = [
+      "src/hooks/useWebSocket.ts",
+      "src/components/XTerminal.tsx",
+      "src/components/TerminalView.tsx",
+      "src/components/chat/useChatLog.ts",
+    ];
+    for (const file of consumers) {
+      const text = source(file);
+      expect(text).toContain("openWs(");
+      expect(text.match(/new WebSocket\s*\(/g) ?? []).toHaveLength(0);
+    }
+    expect((source("src/lib/api.ts").match(/new WebSocket\s*\(/g) ?? []).length).toBe(2);
+  });
+
   test("setStoredHost persists only the canonicalized exact origin, never raw input", () => {
     const text = source("src/lib/api.ts");
     const fn = text.slice(text.indexOf("export function setStoredHost"), text.indexOf("\n}", text.indexOf("export function setStoredHost")));

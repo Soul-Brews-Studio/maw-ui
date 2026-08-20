@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ansiToHtml } from "../lib/ansi";
 import { roomStyle } from "../lib/constants";
-import { wsUrl } from "../lib/api";
+import { openWs } from "../lib/api";
 import type { Session, AgentState } from "../lib/types";
 import { uploadTerminalImage } from "../lib/terminalImageUpload";
 import { useDevice } from "../hooks/useDevice";
@@ -40,25 +40,29 @@ export const TerminalView = memo(function TerminalView({ sessions, agents, conne
 
   // Own WebSocket for capture stream (separate from main fleet WS)
   useEffect(() => {
-    const ws = new WebSocket(wsUrl("/ws"));
-    wsRef.current = ws;
+    let alive = true;
+    // Ticket minting is async, so the socket may not exist yet at cleanup time.
+    openWs("/ws").then(ws => {
+      if (!alive) { ws.close(); return; }
+      wsRef.current = ws;
 
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === "capture") {
-          const out = outputRef.current;
-          const atBottom = out ? out.scrollHeight - out.scrollTop - out.clientHeight < 60 : true;
-          setCaptureHtml(ansiToHtml(data.content || "(empty)"));
-          if (atBottom) requestAnimationFrame(() => out?.scrollTo(0, out.scrollHeight));
-        }
-      } catch {}
-    };
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === "capture") {
+            const out = outputRef.current;
+            const atBottom = out ? out.scrollHeight - out.scrollTop - out.clientHeight < 60 : true;
+            setCaptureHtml(ansiToHtml(data.content || "(empty)"));
+            if (atBottom) requestAnimationFrame(() => out?.scrollTo(0, out.scrollHeight));
+          }
+        } catch {}
+      };
 
-    ws.onclose = () => { wsRef.current = null; };
-    ws.onerror = () => ws.close();
+      ws.onclose = () => { wsRef.current = null; };
+      ws.onerror = () => ws.close();
+    }).catch(() => {});
 
-    return () => { ws.close(); wsRef.current = null; };
+    return () => { alive = false; wsRef.current?.close(); wsRef.current = null; };
   }, []);
 
   // Subscribe when target changes
