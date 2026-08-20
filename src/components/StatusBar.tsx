@@ -68,7 +68,9 @@ interface StatusBarProps {
   children?: ReactNode;
 }
 
-const NAV_ITEMS = [
+type NavItem = { href: string; label: string; id: string; external?: boolean };
+
+const NAV_ITEMS: NavItem[] = [
   { href: "#mission", label: "Mission", id: "mission" },
   { href: "#dashboard", label: "Dashboard", id: "dashboard" },
   { href: "#fleet", label: "Fleet", id: "fleet" },
@@ -83,6 +85,9 @@ const NAV_ITEMS = [
   // Board, Loops, Jarvis, Fame, BoB removed — no upstream backends
   // (from BankCurfew's fork, PR #19). Files kept per Nothing is Deleted.
   { href: "#config", label: "Config", id: "config" },
+  // External KB link — opens the (already auth-gated) TconHR guide hub in a new tab.
+  // Absolute same-origin path → existing dashboard login cookie is sent → no re-login on mobile.
+  { href: "/maw/tconsiam/guides/tconhr.html", label: "📚 KB", id: "kb", external: true },
 ];
 
 const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
@@ -188,19 +193,32 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
             )}
           </button>
         )}
-        {NAV_ITEMS.map((item) => (
-          <a
-            key={item.id}
-            href={item.href}
-            className={`transition-colors whitespace-nowrap ${
-              activeView === item.id
-                ? "text-cyan-400 font-bold"
-                : "text-white/50 hover:text-white/80"
-            }`}
-          >
-            {item.label}
-          </a>
-        ))}
+        {NAV_ITEMS.map((item) =>
+          item.external ? (
+            <a
+              key={item.id}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors whitespace-nowrap text-amber-300/70 hover:text-amber-200"
+              title="TconHR KB guide (opens gated doc — same login)"
+            >
+              {item.label}
+            </a>
+          ) : (
+            <a
+              key={item.id}
+              href={item.href}
+              className={`transition-colors whitespace-nowrap ${
+                activeView === item.id
+                  ? "text-cyan-400 font-bold"
+                  : "text-white/50 hover:text-white/80"
+              }`}
+            >
+              {item.label}
+            </a>
+          )
+        )}
       </nav>
     </header>
   );
