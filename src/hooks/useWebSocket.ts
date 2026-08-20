@@ -6,10 +6,20 @@ type MessageHandler = (data: any) => void;
 const BASE_DELAY = 1000;
 const MAX_DELAY = 30000;
 
+// Consecutive failed handshakes, with the socket never once opening, before we
+// call it a refusal rather than a flaky network. Three is ~7s of backoff.
+const REFUSED_AFTER = 3;
+
 export function useWebSocket(onMessage: MessageHandler) {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  // The browser deliberately hides the HTTP status of a failed WS handshake, so
+  // a 401 upgrade rejection is indistinguishable from a dead host at the socket
+  // API. What IS distinguishable: never opening even once, repeatedly. A host
+  // that is merely down also fails HTTP, which the stale-data banner already
+  // covers — so this signal is only surfaced alongside healthy HTTP.
+  const [refused, setRefused] = useState(false);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
 
@@ -17,6 +27,7 @@ export function useWebSocket(onMessage: MessageHandler) {
     let alive = true;
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let attempt = 0;
+    let everOpened = false;
 
     function retryLater() {
       if (!alive) return;
@@ -43,14 +54,19 @@ export function useWebSocket(onMessage: MessageHandler) {
 
       ws.onopen = () => {
         attempt = 0;
+        everOpened = true;
         setConnected(true);
         setReconnecting(false);
+        setRefused(false);
       };
       ws.onmessage = (e) => {
         try { onMessageRef.current(JSON.parse(e.data)); } catch {}
       };
       ws.onclose = () => {
         setConnected(false);
+        // Only a never-opened socket counts. A connection that worked and then
+        // dropped is an ordinary disconnect, not the backend refusing us.
+        if (!everOpened && attempt + 1 >= REFUSED_AFTER) setRefused(true);
         retryLater();
       };
       ws.onerror = () => ws.close();
@@ -71,5 +87,5 @@ export function useWebSocket(onMessage: MessageHandler) {
     }
   }, []);
 
-  return { connected, reconnecting, send };
+  return { connected, reconnecting, refused, send };
 }

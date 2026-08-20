@@ -5,6 +5,8 @@
  */
 import { type ReactNode, useCallback, useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useHttpHealth } from "../hooks/useHttpHealth";
+import { wsRefusalNotice } from "../lib/wsRefusalNotice";
 import { useSessions } from "../hooks/useSessions";
 import { useFleetStore } from "../lib/store";
 import { StatusBar } from "../components/StatusBar";
@@ -44,7 +46,10 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
   const toggleMuted = useFleetStore((s) => s.toggleMuted);
   useEffect(() => { setSoundMuted(muted); }, [muted]);
 
-  const { connected, reconnecting, send } = useWebSocket(handleMessage);
+  const { connected, reconnecting, refused: wsRefused, send } = useWebSocket(handleMessage);
+  const httpHealth = useHttpHealth();
+  // Only claim "HTTP works, but the socket is refused" when HTTP really is fine.
+  const refusalVisible = wsRefused && httpHealth.healthy;
   const askCount = useFleetStore((s) => s.asks.filter((a) => !a.dismissed).length);
 
   const onSelectAgent = useCallback((agent: AgentState) => {
@@ -80,11 +85,15 @@ export function AppShell({ view, fullHeight, children }: AppShellProps) {
             />
           </div>
           {children(ctx)}
-          {serverError && (
+          {(refusalVisible || serverError) && (
             <div className="fixed top-0 inset-x-0 z-[9999] flex justify-center pt-3 px-4 pointer-events-none">
               <div className="pointer-events-auto px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-lg max-w-2xl" style={{ background: "rgba(20,5,5,0.92)", border: "1px solid rgba(239,68,68,0.4)" }}>
-                <p className="font-mono text-xs font-bold" style={{ color: "#fca5a5" }}>⚠️ Live data is stale</p>
-                <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>{serverError}</p>
+                <p className="font-mono text-xs font-bold" style={{ color: "#fca5a5" }}>
+                  ⚠️ {refusalVisible ? wsRefusalNotice().title : "Live data is stale"}
+                </p>
+                <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  {refusalVisible ? wsRefusalNotice().detail : serverError}
+                </p>
               </div>
             </div>
           )}

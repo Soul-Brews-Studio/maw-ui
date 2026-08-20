@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { wsRefusalNotice } from "./lib/wsRefusalNotice";
 import { useSessions } from "./hooks/useSessions";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UniverseBg } from "./components/UniverseBg";
@@ -173,11 +174,12 @@ function useAudioUnlock() {
 }
 
 /** Shared layout — StatusBar + overlays rendered once for all views */
-function Layout({ activeView, connected, reconnecting, serverError, agentCount, sessionCount, tabCount, askCount, muted, onToggleMute, onJump, onInbox, statusBarChildren, terminalModal, showShortcuts, onCloseShortcuts, jumpOverlay, inboxOverlay, broadcastModal, fullHeight, children }: {
+function Layout({ activeView, connected, reconnecting, serverError, wsRefused, agentCount, sessionCount, tabCount, askCount, muted, onToggleMute, onJump, onInbox, statusBarChildren, terminalModal, showShortcuts, onCloseShortcuts, jumpOverlay, inboxOverlay, broadcastModal, fullHeight, children }: {
   activeView: string;
   connected: boolean;
   reconnecting?: boolean;
   serverError?: string | null;
+  wsRefused?: boolean;
   agentCount: number;
   sessionCount: number;
   tabCount?: number;
@@ -213,6 +215,9 @@ function Layout({ activeView, connected, reconnecting, serverError, agentCount, 
     const t = setTimeout(() => setWsLate(true), 8000);
     return () => clearTimeout(t);
   }, [connected]);
+  // Refusal only makes sense while HTTP is healthy — if both are down the host
+  // is simply unreachable, which the branch below already explains correctly.
+  const refusalVisible = !!wsRefused && httpHealth.healthy;
   const stale = isRemote && (wsLate || !httpHealth.healthy);
 
   const onDisconnect = useCallback(() => {
@@ -239,20 +244,24 @@ function Layout({ activeView, connected, reconnecting, serverError, agentCount, 
       <FloatingButtons />
 
       {/* Self-healing banner — stale remote host */}
-      {(serverError || stale) && (
+      {(refusalVisible || serverError || stale) && (
         <div className="fixed top-0 inset-x-0 z-[9999] flex justify-center pt-3 px-4 pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-lg max-w-2xl" style={{ background: "rgba(20,5,5,0.92)", border: "1px solid rgba(239,68,68,0.4)" }}>
             <span className="text-lg">⚠️</span>
             <div className="flex-1 min-w-0">
               <p className="font-mono text-xs" style={{ color: "#fca5a5" }}>
-                {serverError
+                {refusalVisible
+                  ? <>{wsRefusalNotice().title}</>
+                  : serverError
                   ? <>Live data is stale</>
                   : !httpHealth.healthy
                   ? <>Requests blocked — <span className="font-bold">{activeHost}</span></>
                   : <>Can't reach <span className="font-bold">{activeHost}</span></>}
               </p>
               <p className="font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-                {serverError
+                {refusalVisible
+                  ? wsRefusalNotice().detail
+                  : serverError
                   ? serverError
                   : !httpHealth.healthy
                   ? <>Circuit open after {httpHealth.consecutiveFails} failures ({httpHealth.lastError || "network"}). Chrome PNA may be blocking HTTP→LAN — try https:// or change host.</>
@@ -417,7 +426,7 @@ export function App() {
   const muted = useFleetStore((s) => s.muted);
   const toggleMuted = useFleetStore((s) => s.toggleMuted);
   useEffect(() => { setSoundMuted(muted); }, [muted]);
-  const { connected, reconnecting, send } = useWebSocket(handleMessage);
+  const { connected, reconnecting, refused: wsRefused, send } = useWebSocket(handleMessage);
 
   const onSelectAgent = useCallback((agent: AgentState) => {
     justSelectedRef.current = true;
@@ -465,6 +474,7 @@ export function App() {
     connected,
     reconnecting,
     serverError,
+    wsRefused,
     agentCount: filteredAgents.length,
     sessionCount: sessions.length,
     tabCount: sessions.reduce((sum, s) => sum + s.windows.length, 0),

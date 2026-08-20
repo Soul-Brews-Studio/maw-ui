@@ -57,7 +57,11 @@ export function setSoundProfile(p: SoundProfile) {
 }
 
 // --- Saiyan (MP3) ---
-const saiyanSounds = ["/office/saiyan.mp3", "/office/saiyan-aura.mp3", "/office/saiyan-rose.mp3", "/office/saiyan-2.mp3"];
+// Web-root paths. These files came from maw-js in 99758ae, where the app was
+// served under an office prefix; the extraction put them at the root of public/
+// but kept the old prefix, so every Saiyan clip 404'd from March until
+// 2026-08-20 — the picker offered a profile that silently played nothing.
+const saiyanSounds = ["/saiyan.mp3", "/saiyan-aura.mp3", "/saiyan-rose.mp3", "/saiyan-2.mp3"];
 const SAIYAN_MAX_PLAY = 3;
 const SAIYAN_FADE_MS = 1500;
 
