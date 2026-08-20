@@ -127,6 +127,48 @@ export async function authenticateOperator(token: string, signal?: AbortSignal):
   return "authenticated";
 }
 
+/** WebSocket subprotocol maw-rs echoes back on an accepted ticketed upgrade. */
+export const WS_PROTOCOL = "maw.ws.v1";
+
+/**
+ * Mint a fresh one-use WebSocket ticket for `path`.
+ *
+ * Browsers cannot set arbitrary headers on a WebSocket handshake, so maw-rs
+ * takes the credential as a subprotocol value instead: the client opens with
+ * ["maw.ws.v1", "<ticket>"] and the server echoes back only "maw.ws.v1".
+ * Tickets are one-use and origin-bound, so every connect AND reconnect needs
+ * a fresh one — never cache the result of this call.
+ *
+ * Returns null when there is no verified credential for the active origin, or
+ * when the mint is refused/malformed. Callers must treat null as "connect
+ * unticketed" and let the server decide, rather than blocking the connection:
+ * a maw-rs old enough to predate ticketing accepts an unticketed upgrade.
+ */
+export async function mintWsTicket(path: string): Promise<string | null> {
+  const credential = operatorCredential;
+  if (!credential) return null;
+  const generation = credential.generation;
+  let response: Response;
+  try {
+    response = await apiFetch("/api/auth/ws-ticket", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+  } catch { return null; }
+  // A credential change mid-flight invalidates this ticket's binding.
+  if (operatorCredential !== credential || operatorCredential.generation !== generation) return null;
+  if (!response.ok) return null;
+  let proof: unknown;
+  try { proof = await response.json(); }
+  catch { return null; }
+  if (!proof || typeof proof !== "object" || Array.isArray(proof)) return null;
+  const value = proof as { protocol?: unknown; ticket?: unknown };
+  if (value.protocol !== WS_PROTOCOL || typeof value.ticket !== "string"
+      || !/^mwt1_[0-9a-f]{64}$/.test(value.ticket)) return null;
+  return value.ticket;
+}
+
 /** Whether we're running in remote mode */
 export const isRemote = !!hostParam;
 

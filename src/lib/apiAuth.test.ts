@@ -296,3 +296,52 @@ describe("verified credential lifecycle", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("websocket ticket factory", () => {
+  test("mints a fresh ticket per call through the credentialed apiFetch path", async () => {
+    await install("operator-token");
+    expect(await api.mintWsTicket("/ws")).toBe(ticket);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://ui.example/api/auth/ws-ticket");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(String(calls[0].init?.body)).toBe(JSON.stringify({ path: "/ws" }));
+    // Tickets are one-use: a second connect must mint again, never reuse.
+    expect(await api.mintWsTicket("/ws")).toBe(ticket);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("returns null without a verified credential instead of throwing", async () => {
+    expect(api.hasOperatorCredential()).toBe(false);
+    // No credential => apiFetch is fail-closed; callers must degrade to an
+    // unticketed connect rather than blocking, so this must not reject.
+    expect(await api.mintWsTicket("/ws")).toBeNull();
+  });
+
+  test("rejects a malformed or wrong-protocol ticket response", async () => {
+    await install("operator-token");
+    for (const body of [
+      { protocol: "maw.ws.v2", ticket },
+      { protocol: "maw.ws.v1", ticket: `mwt1_${"A".repeat(64)}` },
+      { protocol: "maw.ws.v1", ticket: `other_${"a".repeat(64)}` },
+      { protocol: "maw.ws.v1" },
+    ]) {
+      globalThis.fetch = (async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response(JSON.stringify(body), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        })) as unknown as typeof fetch;
+      expect(await api.mintWsTicket("/ws")).toBeNull();
+    }
+  });
+
+  test("returns null when the credential changes mid-flight", async () => {
+    await install("operator-token");
+    const pending = deferred<Response>();
+    globalThis.fetch = (async (_url: string | URL | Request, _init?: RequestInit) =>
+      pending.promise) as unknown as typeof fetch;
+    const inflight = api.mintWsTicket("/ws");
+    // Host change / relock invalidates the origin binding this ticket assumed.
+    api.clearOperatorCredential();
+    pending.resolve(verified());
+    expect(await inflight).toBeNull();
+  });
+});

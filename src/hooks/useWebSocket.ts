@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { wsUrl } from "../lib/api";
+import { wsUrl, mintWsTicket, WS_PROTOCOL } from "../lib/api";
 
 type MessageHandler = (data: any) => void;
 
@@ -18,9 +18,30 @@ export function useWebSocket(onMessage: MessageHandler) {
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let attempt = 0;
 
-    function connect() {
+    function retryLater() {
       if (!alive) return;
-      const ws = new WebSocket(wsUrl("/ws"));
+      setReconnecting(true);
+      const delay = Math.min(BASE_DELAY * 2 ** attempt, MAX_DELAY);
+      attempt++;
+      reconnectTimer = setTimeout(run, delay);
+    }
+
+    // connect() is async (ticket minting), so it can never be handed straight
+    // to setTimeout — a synchronous throw from the WebSocket constructor would
+    // become an unhandled rejection and silently kill the retry loop.
+    function run() { connect().catch(retryLater); }
+
+    async function connect() {
+      if (!alive) return;
+      // Tickets are one-use and origin-bound, so mint per connect AND per
+      // reconnect. A null ticket means "no verified credential" — open
+      // unticketed and let the server decide, which keeps pre-ticketing
+      // maw-rs builds working.
+      const ticket = await mintWsTicket("/ws");
+      if (!alive) return;
+      const ws = ticket
+        ? new WebSocket(wsUrl("/ws"), [WS_PROTOCOL, ticket])
+        : new WebSocket(wsUrl("/ws"));
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -33,17 +54,12 @@ export function useWebSocket(onMessage: MessageHandler) {
       };
       ws.onclose = () => {
         setConnected(false);
-        if (alive) {
-          setReconnecting(true);
-          const delay = Math.min(BASE_DELAY * 2 ** attempt, MAX_DELAY);
-          attempt++;
-          reconnectTimer = setTimeout(connect, delay);
-        }
+        retryLater();
       };
       ws.onerror = () => ws.close();
     }
 
-    connect();
+    run();
     return () => {
       alive = false;
       clearTimeout(reconnectTimer);
