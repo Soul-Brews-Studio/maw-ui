@@ -5,6 +5,17 @@
 const STORAGE_KEY = "maw-host";
 const RECENT_KEY = "maw-host-recent";
 
+/**
+ * Build-time only — never a runtime or server-reported signal.
+ *
+ * Set at build time (`VITE_OPEN_MODE=1 vite build`) for deployments that
+ * deliberately run without operator auth. Vite statically replaces
+ * `import.meta.env.VITE_*`, so the default gated build compiles this to
+ * `false` and the auth checks below become unconditional — the open path is
+ * not present in that bundle at all.
+ */
+export const OPEN_MODE = import.meta.env.VITE_OPEN_MODE === "1";
+
 // The W3C secure-contexts spec exempts loopback addresses from mixed-content
 // blocking: browsers treat http://localhost, http://127.0.0.0/8, and
 // http://[::1] as "potentially trustworthy" regardless of the page's own
@@ -337,7 +348,17 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     throw new Error("caller_auth_forbidden");
   }
   const requestCredential = operatorCredential?.exactOrigin === resolved.origin ? operatorCredential : null;
-  if (!requestCredential) throw new Error("operator_auth_required");
+  // Fail closed in the gated build: no verified credential, no request.
+  //
+  // OPEN_MODE builds deliberately compile the operator gate out, so a
+  // credential is never installed and this check would reject every one of the
+  // ~50 apiFetch call sites — capture previews, dashboard, config, search,
+  // worktrees, uploads. WebSocket features kept working (they never touch
+  // apiFetch), so the app looked alive while every HTTP-backed panel sat empty.
+  // Same shape as #111: two individually-correct changes failing only in
+  // combination. The flag is build-time and statically replaced, so the gated
+  // build still contains the unconditional throw.
+  if (!OPEN_MODE && !requestCredential) throw new Error("operator_auth_required");
   const requestToken = requestCredential?.token ?? null;
   if (requestToken) suppliedHeaders.set("Authorization", `Bearer ${requestToken}`);
   const url = resolved.toString();

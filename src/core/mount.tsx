@@ -1,23 +1,12 @@
 import { createElement, type ComponentType, type FormEvent, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { authenticateOperator, canonicalizeBackendOrigin, clearOperatorCredential,
+import { OPEN_MODE, authenticateOperator, canonicalizeBackendOrigin, clearOperatorCredential,
   getActiveBackendOrigin, hasOperatorCredential, setStoredHost, subscribeOperatorCredential } from "../lib/api";
 import "../index.css";
 
 type Loader = () => Promise<{ default: ComponentType }>;
 const authSnapshot = () => hasOperatorCredential();
 
-// Build-time only — never a runtime/server-reported signal. maw-rs's own
-// "open mode" (no-token-required, backward-compatible) cannot be trusted
-// client-side at runtime: an attacker's server could claim the same thing
-// (this is exactly the class of bypass #80's invariants forbid). This flag
-// instead controls what SHIPS in a given build: unset (the default, used
-// for god.buildwithoracle.com) compiles the gate in; set at build time for
-// a distinct, separately-built deployment (e.g. a local/archived maw-js
-// setup you fully control end to end) compiles it out entirely — Vite
-// statically replaces import.meta.env.VITE_* so the gated build never
-// contains this branch or the open-mode code path.
-const OPEN_MODE = import.meta.env.VITE_OPEN_MODE === "1";
 
 function Application({ load }: { load: Loader }) {
   const [App, setApp] = useState<ComponentType | null>(null);

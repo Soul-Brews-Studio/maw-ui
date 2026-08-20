@@ -20,16 +20,31 @@ describe("operator bootstrap source boundary", () => {
   });
 
   test("open-mode escape hatch is a build-time-only flag, never a runtime/server signal", () => {
-    const mount = read("src/core/mount.tsx");
+    const api = read("src/lib/api.ts");
     // Must be gated by exactly one thing: a statically-replaced Vite env var.
-    // If this ever starts reading from api.ts (activeBackendOrigin, a fetch
-    // response, isPrivateHost, etc.) instead, an attacker-controlled server
-    // could claim "I'm open" and bypass the gate the same way maw-rs's own
-    // backward-compatible open mode must never be trusted client-side.
-    expect(mount).toMatch(/const OPEN_MODE = import\.meta\.env\.VITE_OPEN_MODE === "1";/);
-    const openModeLine = mount.slice(mount.indexOf("const OPEN_MODE ="), mount.indexOf("\n", mount.indexOf("const OPEN_MODE =")));
-    expect(openModeLine).not.toMatch(/hasOperatorCredential|activeBackendOrigin|fetch\(|api\./);
-    // The mount() call site must actually branch on it — not just define it unused.
-    expect(mount).toMatch(/mount\(load: Loader\) \{\s*\n\s*createRoot\(document\.getElementById\("root"\)!\)\.render\(OPEN_MODE \?/);
+    // If this ever starts reading from a fetch response or server-reported
+    // state, an attacker-controlled server could claim "I'm open" and bypass
+    // the gate — the same reason maw-rs's own backward-compatible open mode
+    // must never be trusted client-side.
+    expect(api).toMatch(/export const OPEN_MODE = import\.meta\.env\.VITE_OPEN_MODE === "1";/);
+    const line = api.slice(api.indexOf("export const OPEN_MODE ="), api.indexOf("\n", api.indexOf("export const OPEN_MODE =")));
+    expect(line).not.toMatch(/hasOperatorCredential|activeBackendOrigin|fetch\(|response|window\./);
+    // Defined once, imported everywhere — a second copy can drift out of sync.
+    expect(read("src/core/mount.tsx")).not.toMatch(/const OPEN_MODE =/);
+    expect(read("src/core/mount.tsx")).toMatch(/import \{ OPEN_MODE,/);
+    // The mount() call site must actually branch on it, not define it unused.
+    expect(read("src/core/mount.tsx")).toMatch(/\.render\(OPEN_MODE \?/);
+  });
+
+  test("apiFetch's fail-closed check honours OPEN_MODE, so HTTP is not dead in open builds", () => {
+    // Regression: #108 made apiFetch fail closed without a credential, and
+    // OPEN_MODE compiles the gate out so no credential is ever installed.
+    // Together they killed all ~50 apiFetch call sites (capture previews,
+    // dashboard, config, search, uploads) while WebSocket features kept
+    // working — so the app looked alive with every HTTP panel empty.
+    const api = read("src/lib/api.ts");
+    expect(api).toMatch(/if \(!OPEN_MODE && !requestCredential\) throw new Error\("operator_auth_required"\);/);
+    // The unconditional form must not survive anywhere.
+    expect(api).not.toMatch(/^\s*if \(!requestCredential\) throw/m);
   });
 });
