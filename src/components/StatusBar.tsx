@@ -2,6 +2,7 @@ import { memo, useState, useEffect, useRef, type ReactNode } from "react";
 import { apiFetch, isRemote, activeHost } from "../lib/api";
 import { isVisible } from "../lib/visibility";
 import { SOUND_PROFILES, getSoundProfile, setSoundProfile, previewSound, type SoundProfile } from "../lib/sounds";
+import { useBackendVersion } from "../hooks/useBackendVersion";
 
 function SoundButton({ muted, onToggleMute }: { muted: boolean; onToggleMute: () => void }) {
   const [open, setOpen] = useState(false);
@@ -116,6 +117,7 @@ function useFleetTotal() {
 }
 
 export const StatusBar = memo(function StatusBar({ connected, agentCount, sessionCount, tabCount = 0, activeView = "office", askCount = 0, onInbox, onJump, muted, onToggleMute, children }: StatusBarProps) {
+  const backend = useBackendVersion();
   const { total } = useFleetTotal();
   return (
     <header className="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 mx-4 sm:mx-6 mt-3 px-4 sm:px-6 py-2.5 rounded-2xl bg-black/50 backdrop-blur-xl border border-white/[0.06] shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
@@ -145,9 +147,22 @@ export const StatusBar = memo(function StatusBar({ connected, agentCount, sessio
           <strong className="text-green-400">{tabCount}</strong> tabs
         </span>
       )}
-      <span className="text-[10px] text-white/20 font-mono whitespace-nowrap">
+      <span
+        className="text-[10px] text-white/20 font-mono whitespace-nowrap"
+        title={`UI v${__MAW_VERSION__} (${__MAW_COMMIT__}) built ${__MAW_BUILD__}`}
+      >
         v{__MAW_VERSION__} · {__MAW_BUILD__}
       </span>
+      {/* The daemon's own version — the best predictor of how the UI behaves,
+          and otherwise invisible from the browser. */}
+      {backend && (
+        <span
+          className="text-[10px] text-white/20 font-mono whitespace-nowrap"
+          title={`maw-rs ${backend.version}${backend.node ? ` · ${backend.node}` : ""} — the backend actually serving this page`}
+        >
+          · maw {backend.version}
+        </span>
+      )}
 
       {total && total.tokens > 0 && (
         <span
