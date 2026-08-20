@@ -61,6 +61,25 @@ describe("operator API origin boundary", () => {
     });
   });
 
+  test("exempts loopback origins from mixed-content blocking on https pages", () => {
+    // W3C secure-contexts spec: http://localhost, http://127.0.0.0/8, and
+    // http://[::1] are "potentially trustworthy" regardless of page scheme,
+    // since they're reachable only from the same machine. Anything else
+    // (including .local mDNS hosts) is not exempt.
+    expect(api.canonicalizeBackendOrigin("http://localhost:3461", "https:")).toEqual({
+      exactOrigin: "http://localhost:3461",
+      mixedContent: false,
+    });
+    expect(api.canonicalizeBackendOrigin("http://127.0.0.1:3461", "https:")).toEqual({
+      exactOrigin: "http://127.0.0.1:3461",
+      mixedContent: false,
+    });
+    expect(api.canonicalizeBackendOrigin("http://192.168.1.5:3456", "https:")).toEqual({
+      exactOrigin: "http://192.168.1.5:3456",
+      mixedContent: true,
+    });
+  });
+
   test("rejects malformed, non-web, and non-origin inputs", () => {
     for (const value of ["", "//evil.test", "ftp://good.test", "javascript:alert(1)", "https://@good.test",
       "https://:@good.test", "https://user:pass@good.test", "https://good.test/path", "https://good.test?q=1",

@@ -5,6 +5,18 @@
 const STORAGE_KEY = "maw-host";
 const RECENT_KEY = "maw-host-recent";
 
+// The W3C secure-contexts spec exempts loopback addresses from mixed-content
+// blocking: browsers treat http://localhost, http://127.0.0.0/8, and
+// http://[::1] as "potentially trustworthy" regardless of the page's own
+// scheme, because they are reachable only from the same machine. This is
+// narrower than isPrivateHost() below (which also covers 10.x/192.168.x/.local
+// for the Chrome PNA targetAddressSpace header) — those DO still need HTTPS
+// or explicit PNA opt-in and are not exempt here.
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "localhost" || host === "[::1]" || host === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
 /** Pure trust boundary for every backend origin used by operator auth. */
 export function canonicalizeBackendOrigin(
   input: string,
@@ -24,7 +36,7 @@ export function canonicalizeBackendOrigin(
   }
   return {
     exactOrigin: url.origin,
-    mixedContent: pageProtocol === "https:" && url.protocol === "http:",
+    mixedContent: pageProtocol === "https:" && url.protocol === "http:" && !isLoopbackHostname(url.hostname),
   };
 }
 
