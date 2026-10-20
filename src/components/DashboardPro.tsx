@@ -182,31 +182,31 @@ function ClockDriftPanel({ fed }: { fed: FedStatus | null }) {
 
 function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefresh: () => void }) {
   const [acting, setActing] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const total = sessions.reduce((n, s) => n + s.windows.length, 0);
 
-  const wakeAgent = async (name: string) => {
-    setActing(name);
+  // /api/wake and /api/sleep take the oracle name ("bosun"), not the tmux
+  // window name ("bosun-oracle") — the server appends "-oracle" itself.
+  const runAction = async (action: "wake" | "sleep", windowName: string) => {
+    const target = windowName.replace(/-oracle$/, "");
+    if (action === "sleep" && !confirm(`Sleep ${target}? This stops the running agent.`)) return;
+    setActing(windowName);
+    setError(null);
     try {
-      await apiFetch("/api/wake", {
+      const res = await apiFetch(`/api/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: name }),
+        body: JSON.stringify({ target }),
       });
-      setTimeout(onRefresh, 2000);
-    } catch {}
-    setActing(null);
-  };
-
-  const sleepAgent = async (name: string) => {
-    setActing(name);
-    try {
-      await apiFetch("/api/sleep", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: name }),
-      });
-      setTimeout(onRefresh, 2000);
-    } catch {}
+      const body = await res.json().catch(() => null);
+      if (!res.ok || body?.ok === false) {
+        setError(`${action} ${target} failed: ${body?.error ?? `HTTP ${res.status}`}`);
+      } else {
+        setTimeout(onRefresh, 2000);
+      }
+    } catch (err) {
+      setError(`${action} ${target} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
     setActing(null);
   };
 
@@ -235,7 +235,7 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
                   color: acting === w.name ? "#f59e0b" : w.active ? "#22c55e" : "rgba(255,255,255,0.3)",
                 }}
                 title={w.active ? `Click to sleep ${w.name}` : `Click to wake ${w.name}`}
-                onClick={() => w.active ? sleepAgent(w.name) : wakeAgent(w.name)}
+                onClick={() => runAction(w.active ? "sleep" : "wake", w.name)}
                 disabled={acting !== null}
               >
                 {acting === w.name ? "..." : w.name.replace(/-oracle$/, "")}
@@ -244,6 +244,7 @@ function AgentGridPanel({ sessions, onRefresh }: { sessions: Session[]; onRefres
           ),
         )}
       </div>
+      {error && <div className="mt-2 text-[10px] text-red-400 font-mono">{error}</div>}
     </PanelShell>
   );
 }
