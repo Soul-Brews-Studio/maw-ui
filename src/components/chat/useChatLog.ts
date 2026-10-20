@@ -21,17 +21,28 @@ interface FeedEvent {
 // Heuristic: take first colon if followed by space, recipient ≤ 40 chars,
 // no whitespace in recipient. Tolerant — failed parses drop the event
 // (same filter the old /api/maw-log consumer applied: require from && to).
-function parseRecipient(message: string): [string | null, string] {
-  const m = message.match(/^([a-z0-9_-]{1,40}):\s+(.+)$/is);
+// An optional "<node>:" prefix is skipped — `maw hey mac-tor:helm "…"` logs
+// "mac-tor:helm: …", and the recipient is "helm", not "mac-tor".
+export function parseRecipient(message: string): [string | null, string] {
+  const m = message.match(/^(?:[a-z0-9_-]+:)?([a-z0-9_-]{1,40}):\s+(.+)$/is);
   if (!m) return [null, message];
   return [m[1].toLowerCase(), m[2]];
 }
 
-function feedEventToLogEntry(e: FeedEvent): MawLogEntry | null {
+export function feedEventToLogEntry(e: FeedEvent): MawLogEntry | null {
   if (e.event !== "MessageSend") return null;
   const [to, msg] = parseRecipient(e.message);
   if (!to) return null;
   return { ts: e.timestamp, from: e.oracle, to, msg };
+}
+
+// WS "feed" push → log entries. The server sends one event per message as
+// { type: "feed", event }; a batched { type: "feed", events: [...] } is also accepted.
+export function feedMessageToEntries(msg: { events?: FeedEvent[]; event?: FeedEvent }): MawLogEntry[] {
+  const events = Array.isArray(msg.events) ? msg.events : msg.event ? [msg.event] : [];
+  return events
+    .map(feedEventToLogEntry)
+    .filter((e: MawLogEntry | null): e is MawLogEntry => e !== null);
 }
 
 export function useChatLog(mode: string) {
@@ -81,7 +92,7 @@ export function useChatLog(mode: string) {
   // Real-time: listen for WebSocket push. Handles both "maw-log" (legacy payload
   // type, retained for back-compat — no matches in current maw-js src but cheap
   // to keep per Principle 1 "Nothing is Deleted") and "feed" (the new type
-  // emitted alongside FORGE's 410 rotation, if/when server pushes per-event).
+  // emitted alongside FORGE's 410 rotation; the server pushes one event per message).
   useEffect(() => {
     let ws: WebSocket | null = null;
     let alive = true;
@@ -95,10 +106,8 @@ export function useChatLog(mode: string) {
           let incoming: MawLogEntry[] = [];
           if (msg.type === "maw-log" && msg.entries) {
             incoming = msg.entries;
-          } else if (msg.type === "feed" && Array.isArray(msg.events)) {
-            incoming = msg.events
-              .map(feedEventToLogEntry)
-              .filter((e: MawLogEntry | null): e is MawLogEntry => e !== null);
+          } else if (msg.type === "feed") {
+            incoming = feedMessageToEntries(msg);
           }
           if (incoming.length > 0) {
             setEntries(prev => [...prev, ...incoming]);
