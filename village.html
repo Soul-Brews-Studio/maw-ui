@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oracle Village — maw</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #08090c; color: #d7dbe4;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; background: #101218;
+    border-bottom: 1px solid #1e2230; flex: none;
+  }
+  header .brand { font-size: 13px; font-weight: 600; letter-spacing: .04em; color: #8fb4ff; white-space: nowrap; }
+  header input {
+    flex: 1; min-width: 0;
+    background: #0a0c11; color: #d7dbe4;
+    border: 1px solid #232838; border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; font-family: ui-monospace, monospace;
+  }
+  header input:focus { outline: none; border-color: #3d5a9e; }
+  header button, header a.btn {
+    background: #1b2333; color: #cfd8ea; text-decoration: none;
+    border: 1px solid #2b3446; border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  header button:hover, header a.btn:hover { background: #243047; }
+  #frame { flex: 1; width: 100%; border: 0; background: #08090c; }
+  #hint {
+    display: none; padding: 24px; text-align: center;
+    font-size: 14px; line-height: 1.7; color: #9aa3b5;
+  }
+  #hint code { background: #12151d; padding: 2px 6px; border-radius: 4px; color: #c5d2ea; }
+  @media (max-width: 600px) {
+    header .brand { display: none; }
+    header { padding: 6px 8px; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">ORACLE VILLAGE</span>
+  <input id="host" type="text" spellcheck="false" placeholder="https://your-node.ts.net/village/">
+  <button id="go">เปิด</button>
+  <a class="btn" id="office" href="./#office">Office</a>
+</header>
+<iframe id="frame" title="Oracle Village" allow="autoplay; fullscreen; xr-spatial-tracking"></iframe>
+<div id="hint">
+  ใส่ URL ของ village แล้วกด <b>เปิด</b> — เช่น <code>https://your-node.ts.net/village/</code><br>
+  village ทำงานบนเครือข่ายส่วนตัวของ node (เช่น Tailscale) ผู้เปิดต้องเข้าถึงเครือข่ายเดียวกันได้
+</div>
+<script>
+  // village is a plain web app, not a maw node — it speaks no maw REST/WS protocol.
+  // This page therefore only embeds it; it never calls /api/* on the target host.
+  const params = new URLSearchParams(location.search);
+  const input = document.getElementById('host');
+  const frame = document.getElementById('frame');
+  const hint = document.getElementById('hint');
+
+  const officeLink = document.getElementById('office');
+
+  const stored = localStorage.getItem('maw:villageHost') || '';
+  const initial = params.get('host') || stored;
+  input.value = initial;
+
+  // The Office button must land on the ARRA Office of a real maw-js node.
+  // maw-ui reads its backend from ?host= (persisted in localStorage "maw-host"),
+  // so a bare "/#office" drops the visitor on ConnectPage — or, when this page is
+  // served from a plain static host, on that host's own index. A village URL is
+  // also not a maw node: the node usually sits on a sibling path of the same
+  // origin (e.g. .../village/ next to .../maw/), so guessing the origin is wrong
+  // too. Probe the candidates the same way ConnectPage does — /api/config must
+  // answer with a "node" field — and only then hand the host to maw-ui.
+  function mawCandidates() {
+    const out = [];
+    const push = (v) => { const u = (v || '').trim().replace(/\/+$/, ''); if (u && !out.includes(u)) out.push(u); };
+    push(normalize(params.get('maw') || ''));
+    push(localStorage.getItem('maw-host') || '');
+    const village = normalize(input.value);
+    if (village) {
+      try {
+        const u = new URL(village);
+        push(u.origin + u.pathname.replace(/\/[^/]*\/?$/, '/maw'));
+        push(u.origin);
+      } catch { /* not a URL yet */ }
+    }
+    return out;
+  }
+
+  async function isMawNode(host) {
+    try {
+      const res = await fetch(host + '/api/config', { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return false;
+      return !!(await res.json()).node;
+    } catch { return false; }
+  }
+
+  function syncOffice() {
+    const first = mawCandidates()[0];
+    officeLink.href = first ? './?host=' + encodeURIComponent(first) + '#office' : './#office';
+  }
+
+  officeLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const label = officeLink.textContent;
+    officeLink.textContent = 'Office…';
+    for (const host of mawCandidates()) {
+      if (await isMawNode(host)) {
+        location.href = './?host=' + encodeURIComponent(host) + '#office';
+        return;
+      }
+    }
+    officeLink.textContent = label;
+    // No reachable node — let maw-ui's own connect screen take over.
+    location.href = './#office';
+  });
+
+  function normalize(raw) {
+    const v = raw.trim();
+    if (!v) return '';
+    return /^https?:\/\//i.test(v) ? v : 'https://' + v;
+  }
+
+  function show(url) {
+    if (!url) {
+      frame.style.display = 'none';
+      hint.style.display = 'block';
+      return;
+    }
+    localStorage.setItem('maw:villageHost', url);
+    hint.style.display = 'none';
+    frame.style.display = 'block';
+    frame.src = url;
+  }
+
+  function open() {
+    const url = normalize(input.value);
+    input.value = url;
+    const next = new URLSearchParams(location.search);
+    if (url) next.set('host', url); else next.delete('host');
+    history.replaceState(null, '', location.pathname + (next.toString() ? '?' + next : ''));
+    show(url);
+    syncOffice();
+  }
+
+  document.getElementById('go').addEventListener('click', open);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+
+  show(normalize(initial));
+  syncOffice();
+</script>
+</body>
+</html>
