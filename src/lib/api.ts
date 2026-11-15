@@ -53,6 +53,23 @@ export function canonicalizeBackendOrigin(
 
 const pageLocation = () => typeof window === "undefined" ? null : window.location;
 const storage = () => typeof localStorage === "undefined" ? null : localStorage;
+// One-click links: #token=<value> in the fragment (never sent to any server). Token only: the
+// backend host is never taken from a URL (see the ?host= inventory test: an attacker-named origin
+// would receive the operator token). The fragment is wiped at once; the token waits in memory and
+// is offered only to the host the operator already chose.
+let fragmentToken = "";
+(() => {
+  const loc = pageLocation();
+  if (!loc || !loc.hash) return;
+  const match = /(?:^#|&)token=([^&]+)/.exec(loc.hash);
+  if (!match) return;
+  let token = "";
+  try { token = decodeURIComponent(match[1]); } catch { return; }
+  try { window.history.replaceState(window.history.state, "", loc.pathname + loc.search); } catch { /* history blocked */ }
+  fragmentToken = token;
+})();
+/** The token from a one-click link, once; empty after the first call. */
+export function takeFragmentToken(): string { const token = fragmentToken; fragmentToken = ""; return token; }
 let hostParam = storage()?.getItem(STORAGE_KEY) ?? null;
 
 function activeBackendOrigin(): string | null {
