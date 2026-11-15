@@ -1,7 +1,7 @@
 import { createElement, type ComponentType, type FormEvent, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { OPEN_MODE, authenticateOperator, canonicalizeBackendOrigin, clearOperatorCredential,
-  getActiveBackendOrigin, hasOperatorCredential, setStoredHost, subscribeOperatorCredential } from "../lib/api";
+  getActiveBackendOrigin, hasOperatorCredential, setStoredHost, subscribeOperatorCredential, takeFragmentToken } from "../lib/api";
 import "../index.css";
 
 type Loader = () => Promise<{ default: ComponentType }>;
@@ -30,6 +30,18 @@ function OperatorGate({ load }: { load: Loader }) {
   const origin = getActiveBackendOrigin();
   const attempt = useRef<AbortController | null>(null);
   useEffect(() => () => { attempt.current?.abort(); clearOperatorCredential(); }, []);
+  // One-click links: api.ts kept #token= in memory; offer it once to the host already chosen.
+  useEffect(() => {
+    const fragmentToken = takeFragmentToken();
+    if (!fragmentToken) return;
+    const controller = new AbortController();
+    attempt.current?.abort();
+    attempt.current = controller;
+    setStatus("checking");
+    void authenticateOperator(fragmentToken, controller.signal).then(outcome => {
+      if (outcome !== "authenticated" && outcome !== "aborted" && outcome !== "stale") setStatus(outcome);
+    });
+  }, []);
 
   if (ready) return <Application load={load} />;
   const submitToken = async (event: FormEvent) => {
