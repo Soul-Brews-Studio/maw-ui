@@ -56,6 +56,7 @@ export default defineConfig({
         federation: resolve(__dirname, "federation.html"),
         federation_2d: resolve(__dirname, "federation_2d.html"),
         workspace: resolve(__dirname, "workspace.html"),
+        village: resolve(__dirname, "village.html"),
       },
     },
   },
